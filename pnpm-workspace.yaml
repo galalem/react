@@ -1,0 +1,4 @@
+packages:
+  - "@galalem/*"
+allowBuilds:
+  esbuild: true

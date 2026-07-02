@@ -1,0 +1,34 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        react: [18, 19]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Override React to ${{ matrix.react }}
+        run: pnpm add -Dw react@${{ matrix.react }} react-dom@${{ matrix.react }}
+      - run: pnpm -r build
+      - run: pnpm -r test
+
+# TODO: add a tarball-smoke job once packages exist:
+#   `pnpm --filter <pkg> pack` → install the tgz into a fresh fixture → import & smoke.
