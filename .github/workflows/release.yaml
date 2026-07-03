@@ -11,17 +11,19 @@ jobs:
     permissions:
       contents: write         # to push version-bump commits/tags
       pull-requests: write     # to open the "Version Packages" PR
-      id-token: write          # for npm provenance (optional, nice-to-have)
+      id-token: write          # required for npm trusted publishing (OIDC) + auto-provenance
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }        # full history so it can detect changes
       - uses: pnpm/action-setup@v4
         with:
           version: 11.9.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm i -g npm@latest       # trusted publishing needs npm >= 11.5.1
       - run: pnpm install --frozen-lockfile
       - name: Create Release PR or Publish
         uses: changesets/action@v1
@@ -30,4 +32,3 @@ jobs:
           version: pnpm version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
