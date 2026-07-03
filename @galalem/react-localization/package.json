@@ -1,0 +1,67 @@
+{
+  "name": "@galalem/react-localization",
+  "version": "0.1.0",
+  "description": "Dead-simple React localization: one function (__) and one component (<T>).",
+  "license": "MIT",
+  "author": "Galalem",
+  "homepage": "https://github.com/galalem/react/tree/main/@galalem/react-localization#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/galalem/react.git",
+    "directory": "@galalem/react-localization"
+  },
+  "bugs": "https://github.com/galalem/react/issues",
+  "keywords": [
+    "react",
+    "i18n",
+    "internationalization",
+    "localization",
+    "l10n",
+    "translation",
+    "vite",
+    "vite-plugin"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js",
+      "require": "./dist/vite.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.tsx src/vite.ts --format esm,cjs --dts --external react",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "vite": ">=5",
+    "magic-string": ">=0.30"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    },
+    "magic-string": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "magic-string": "^0.30.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

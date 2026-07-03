@@ -1,5 +1,5 @@
 {
-  "name": "react",
+  "name": "@galalem/react",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.9.0",
@@ -16,7 +16,7 @@
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "version": "^11.9.0",
+      "version": "11.9.0",
       "onFail": "download"
     }
   },

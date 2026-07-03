@@ -244,6 +244,19 @@ importers:
         specifier: ^4.1.9
         version: 4.1.9(@types/node@26.1.0)(jsdom@29.1.1)(vite@8.1.2(@types/node@26.1.0)(esbuild@0.27.7))
 
+  '@galalem/react-localization':
+    dependencies:
+      react:
+        specifier: '>=18'
+        version: 19.2.7
+      vite:
+        specifier: '>=5'
+        version: 8.1.2(@types/node@26.1.0)(esbuild@0.27.7)
+    devDependencies:
+      magic-string:
+        specifier: ^0.30.0
+        version: 0.30.21
+
 packages:
 
   '@asamuzakjp/css-color@5.1.11':
