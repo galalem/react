@@ -20,7 +20,7 @@ jobs:
           version: 11.9.0
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
       - run: npm i -g npm@latest       # trusted publishing needs npm >= 11.5.1

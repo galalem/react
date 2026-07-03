@@ -11,7 +11,7 @@
     "release": "pnpm build && pnpm test && changeset publish"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "devEngines": {
     "packageManager": {
