@@ -29,6 +29,6 @@ jobs:
         uses: changesets/action@v1
         with:
           publish: pnpm release           # the script from Step 2
-          version: pnpm version
+          version: pnpm run version       # `run` is required — `pnpm version` is a built-in that needs a semver arg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
