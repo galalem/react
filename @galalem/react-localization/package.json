@@ -46,7 +46,7 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "react": ">=18",
+    "react": "^19",
     "vite": ">=5",
     "magic-string": ">=0.30"
   },

@@ -13,13 +13,6 @@
   "engines": {
     "node": ">=24"
   },
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "11.9.0",
-      "onFail": "download"
-    }
-  },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
     "@testing-library/react": "^16.3.2",
