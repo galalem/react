@@ -1,0 +1,49 @@
+{
+  "name": "@galalem/react-router",
+  "version": "0.1.0",
+  "description": "Plug-and-play React router with first-class auth and RBAC. Declare access on the route, not in wrappers.",
+  "license": "MIT",
+  "author": "Galalem",
+  "homepage": "https://github.com/galalem/react/tree/main/@galalem/react-router#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/galalem/react.git",
+    "directory": "@galalem/react-router"
+  },
+  "bugs": "https://github.com/galalem/react/issues",
+  "keywords": [
+    "react",
+    "router",
+    "routing",
+    "auth",
+    "rbac",
+    "guards",
+    "authorization"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.tsx --format esm,cjs --dts --external react",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.include='src/**'"
+  },
+  "peerDependencies": {
+    "react": "^19"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
