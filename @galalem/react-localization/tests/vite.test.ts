@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ReactLocalizationPlugin } from "./vite";
+import { ReactLocalizationPlugin } from "../src/vite";
 
 let root: string;
 

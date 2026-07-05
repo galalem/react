@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { createElement } from "react";
-import { __, T, setTranslations } from "./index";
+import { __, T, setTranslations } from "../src/index";
 
 beforeEach(() => setTranslations({})); // reset the global dict between tests
 
@@ -56,7 +56,7 @@ async function fresh() {
   // Non-matching browser languages so init() doesn't auto-select — keeps
   // assertions deterministic.
   vi.stubGlobal("navigator", { language: "zz", languages: ["zz"] });
-  return await import("./index");
+  return await import("../src/index");
 }
 
 afterEach(() => {

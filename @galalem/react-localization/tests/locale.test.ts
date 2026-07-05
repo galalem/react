@@ -3,12 +3,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 const STORAGE_KEY = "@galalem/react-localization:locale";
 
-type Mod = typeof import("./index");
+type Mod = typeof import("../src/index");
 
 /** Re-import the module fresh so its singleton state is isolated per test. */
 async function fresh(): Promise<Mod> {
   vi.resetModules();
-  return import("./index");
+  return import("../src/index");
 }
 
 /** Replace navigator with a minimal stub for language detection. */

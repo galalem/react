@@ -43,7 +43,8 @@
   },
   "scripts": {
     "build": "tsup src/index.tsx src/vite.ts --format esm,cjs --dts --external react",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.include='src/**'"
   },
   "peerDependencies": {
     "react": "^19",
