@@ -31,7 +31,7 @@ Every non-trivial React app rewrites the same three wrappers: `<RequireAuth>`, `
 
 `@galalem/react-router` takes a stance: **a route is a data object, and its access requirements belong on that object.** Configure auth once, and every guarded route enforces it.
 
-See [DESIGN.md](./DESIGN.md) for the full design rationale.
+> Looking for deeper docs? See **[docs/](./docs/)** — mental model, guards & auth, nested layouts, metadata, and URL state.
 
 ## Install
 
