@@ -1,6 +1,6 @@
 {
   "name": "@galalem/react-localization",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Dead-simple React localization: one function (__) and one component (<T>).",
   "license": "MIT",
   "author": "Galalem",
