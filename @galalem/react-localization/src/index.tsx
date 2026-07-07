@@ -30,32 +30,58 @@ export interface InitSettings {
   storageKey?: string;
 }
 
-// --- Translation -------------------------------------------------------------
+/**
+ * The value returned by {@link useLocale}: the translator, the active locale,
+ * and imperative helpers. Reading any field subscribes the calling component
+ * to locale changes, so translations re-render when `setLocale` swaps the
+ * active dictionary.
+ */
+export interface LocaleAPI {
+  /**
+   * Translate a string. Returns the mapped value if the key exists, otherwise
+   * returns the input unchanged.
+   * @example const { __ } = useLocale(); __("Save");
+   */
+  __: (key: string) => string;
+  /** The currently selected locale, or `undefined` if none has been set yet. */
+  locale: string | undefined;
+  /**
+   * Load a locale, make it active, and persist it to localStorage. Returns a
+   * promise that resolves once the switch has settled (translations applied,
+   * or the failure logged). Awaiting is optional — failures are logged, never
+   * thrown, so a non-awaited call is safe.
+   */
+  setLocale: (locale: string) => Promise<void>;
+  /** Locales registered via {@link init}. */
+  getSupportedLocales: () => string[];
+}
+
+// --- Translation dictionary --------------------------------------------------
 
 let translations: Translations = {};
 
-/** Replace the active dictionary. */
+/**
+ * Replace the active dictionary. Low-level primitive — normally `setLocale`
+ * (via {@link useLocale}) handles this. Exposed for tests and advanced setups
+ * that own their own dictionary source. Does not notify subscribers on its
+ * own; pair with a `setLocale` call if reactive re-renders are needed.
+ */
 export function setTranslations(next: Translations): void {
   translations = next;
 }
 
-/**
- * Translate a string: returns the mapped value if the key exists, otherwise
- * returns the input unchanged.
- * @example __("hello world")
- */
-export function __(key: string): string {
+function translate(key: string): string {
   return translations[key] ?? key;
 }
 
 /**
- * Component form of {@link __} — its (string) children get translated.
+ * Component form of the translator: its (string) children get translated.
  * Auto-subscribes to locale changes via {@link useLocale}, so it re-renders
  * whenever `setLocale` swaps the active dictionary.
  * @example <T>hello world</T>
  */
 export function T({ children }: { children: string }): ReactElement {
-  useLocale();
+  const { __ } = useLocale();
   return <>{__(children)}</>;
 }
 
@@ -83,8 +109,8 @@ let currentLocale: string | undefined;
 
 /**
  * Subscribers get notified after a `setLocale` load resolves and the dictionary
- * has been swapped. `<T>` and `useLocale` register here so components re-render
- * on locale changes.
+ * has been swapped. `useLocale` (used internally by `<T>`) registers here so
+ * components re-render on locale changes.
  */
 const subscribers = new Set<() => void>();
 
@@ -100,22 +126,47 @@ function notifyLocaleChange(): void {
 }
 
 /**
- * Subscribe a component to locale changes. Returns the current locale.
- *
- * Use this inside a component that reads translations via {@link __} to make
- * it re-render whenever `setLocale` swaps the active dictionary. `<T>` already
- * calls this internally, so components that only use `<T>` don't need it.
+ * Snapshot for {@link useSyncExternalStore}: the current translations
+ * *reference*. `applyLocale` swaps this reference on a successful load, so the
+ * snapshot value changes on every locale swap — which is what triggers React
+ * to re-render subscribed components. `currentLocale` alone can't drive this:
+ * it's set synchronously in `applyLocale` before the async load resolves, so
+ * its value is unchanged by the time subscribers are notified.
+ */
+function getTranslationsRef(): Translations {
+  return translations;
+}
+
+/**
+ * React hook: returns `{ __, locale, setLocale, getSupportedLocales }` and
+ * subscribes the calling component to locale changes. Any translation done
+ * with the returned `__` re-renders when `setLocale` swaps the active
+ * dictionary. `<T>` uses this internally, so components that only render
+ * `<T>` children don't need to call it themselves.
  *
  * @example
  *   function Save() {
- *     useLocale();
+ *     const { __ } = useLocale();
  *     return <button>{__("Save")}</button>;
  *   }
+ *
+ * @example
+ *   function LanguageSwitcher() {
+ *     const { locale, setLocale, getSupportedLocales } = useLocale();
+ *     return (
+ *       <select value={locale ?? ""} onChange={(e) => setLocale(e.target.value)}>
+ *         {getSupportedLocales().map((code) => (
+ *           <option key={code} value={code}>{code}</option>
+ *         ))}
+ *       </select>
+ *     );
+ *   }
  */
-export function useLocale(): string | undefined {
-  // Same snapshot function for client and server: `currentLocale` is a
-  // per-process module global — see the SSR notes in the README.
-  return useSyncExternalStore(subscribe, getLocale, getLocale);
+export function useLocale(): LocaleAPI {
+  // Same snapshot on server & client — `translations` is a per-process module
+  // global, so there's nothing to differentiate. See the SSR notes in the README.
+  useSyncExternalStore(subscribe, getTranslationsRef, getTranslationsRef);
+  return { __: translate, locale: currentLocale, setLocale, getSupportedLocales };
 }
 
 /**
@@ -179,13 +230,10 @@ export async function load(locale: string): Promise<Translations> {
 
 /**
  * Load a locale, make it active, and remember it as the user's preference in
- * localStorage. Use this for explicit choices (e.g. a language switcher).
- *
- * Returns a promise that resolves once the switch has settled (translations
- * applied, or the failure logged). Awaiting is optional — failures are logged,
- * never thrown, so a non-awaited call is safe.
+ * localStorage. Not exported — reach it via `useLocale().setLocale` from a
+ * component, so the caller is subscribed to the resulting re-render.
  */
-export function setLocale(locale: string): Promise<void> {
+function setLocale(locale: string): Promise<void> {
   if (!sources.has(locale)) {
     console.warn(
       `[@galalem/react-localization] setLocale("${locale}"): unknown locale. ` +
@@ -197,13 +245,8 @@ export function setLocale(locale: string): Promise<void> {
   return applyLocale(locale);
 }
 
-/** The currently selected locale, or `undefined` if none has been set yet. */
-export function getLocale(): string | undefined {
-  return currentLocale;
-}
-
-/** Locales registered via {@link init}. */
-export function getSupportedLocales(): string[] {
+/** Locales registered via {@link init}. Reach it via `useLocale().getSupportedLocales`. */
+function getSupportedLocales(): string[] {
   return Array.from(sources.keys());
 }
 
@@ -244,7 +287,7 @@ function applyLocale(locale: string): Promise<void> {
   return load(locale)
     .then((next) => {
       if (currentLocale === locale) {
-        setTranslations(next);
+        translations = next;
         notifyLocaleChange();
       }
     })
@@ -256,7 +299,7 @@ function applyLocale(locale: string): Promise<void> {
 /**
  * Pick the initial locale automatically: a stored preference (if it is still
  * registered), otherwise the detected browser language. Auto choices are not
- * persisted — only an explicit {@link setLocale} writes the preference.
+ * persisted — only an explicit `setLocale` writes the preference.
  */
 function autoSelectLocale(): void {
   const stored = getStoredLocale();

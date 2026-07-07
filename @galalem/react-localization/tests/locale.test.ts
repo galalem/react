@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { act, cleanup, renderHook } from "@testing-library/react";
 
 const STORAGE_KEY = "@galalem/react-localization:locale";
 
@@ -9,6 +10,11 @@ type Mod = typeof import("../src/index");
 async function fresh(): Promise<Mod> {
   vi.resetModules();
   return import("../src/index");
+}
+
+/** Mount the hook once and hand back its `result` for imperative test flows. */
+function mountHook(m: Mod) {
+  return renderHook(() => m.useLocale()).result;
 }
 
 /** Replace navigator with a minimal stub for language detection. */
@@ -39,6 +45,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -99,11 +106,12 @@ describe("load", () => {
   });
 });
 
-describe("getSupportedLocales", () => {
+describe("useLocale().getSupportedLocales", () => {
   it("lists registered locales in order", async () => {
     const m = await fresh();
     m.init({ en: { a: "A" }, fr: { b: "B" } });
-    expect(m.getSupportedLocales()).toEqual(["en", "fr"]);
+    const result = mountHook(m);
+    expect(result.current.getSupportedLocales()).toEqual(["en", "fr"]);
   });
 });
 
@@ -130,31 +138,40 @@ describe("detectLocale", () => {
   });
 });
 
-describe("setLocale / getLocale", () => {
+describe("useLocale().setLocale", () => {
   it("switches and persists the choice", async () => {
     const m = await fresh();
     m.init({ en: { a: "A" }, fr: { b: "B" } });
+    const result = mountHook(m);
 
-    m.setLocale("fr");
+    await act(async () => {
+      await result.current.setLocale("fr");
+    });
 
-    expect(m.getLocale()).toBe("fr");
+    expect(result.current.locale).toBe("fr");
     expect(localStorage.getItem(STORAGE_KEY)).toBe("fr");
   });
 
   it("resolves once the locale is applied", async () => {
     const m = await fresh();
     m.init({ en: { hi: "Hi" }, es: { hi: "Hola" } });
+    const result = mountHook(m);
 
-    await m.setLocale("es");
+    await act(async () => {
+      await result.current.setLocale("es");
+    });
 
-    expect(m.__("hi")).toBe("Hola");
+    expect(result.current.__("hi")).toBe("Hola");
   });
 
   it("uses a custom storageKey from init settings", async () => {
     const m = await fresh();
     m.init({ en: { a: "A" }, fr: { b: "B" } }, { storageKey: "my-key" });
+    const result = mountHook(m);
 
-    m.setLocale("fr");
+    await act(async () => {
+      await result.current.setLocale("fr");
+    });
 
     expect(localStorage.getItem("my-key")).toBe("fr");
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
@@ -164,8 +181,11 @@ describe("setLocale / getLocale", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const m = await fresh();
     m.init({ en: { a: "A" } });
+    const result = mountHook(m);
 
-    m.setLocale("zz");
+    await act(async () => {
+      await result.current.setLocale("zz");
+    });
 
     expect(warn).toHaveBeenCalled();
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
@@ -183,16 +203,18 @@ describe("setLocale / getLocale", () => {
     const fast = async () => ({ default: { greet: "Hallo" } });
 
     m.init({ fr: slow, de: fast });
+    const result = mountHook(m);
 
-    const slowSwitch = m.setLocale("fr"); // kicks off slow load
-    const fastSwitch = m.setLocale("de"); // wins the race
+    await act(async () => {
+      const slowSwitch = result.current.setLocale("fr"); // kicks off slow load
+      const fastSwitch = result.current.setLocale("de"); // wins the race
+      await fastSwitch;
+      resolveSlow({ default: { greet: "Salut" } }); // stale resolve
+      await slowSwitch;
+    });
 
-    await fastSwitch;
-    resolveSlow({ default: { greet: "Salut" } }); // stale resolve
-    await slowSwitch;
-
-    expect(m.getLocale()).toBe("de");
-    expect(m.__("greet")).toBe("Hallo"); // stale "fr" load did NOT clobber
+    expect(result.current.locale).toBe("de");
+    expect(result.current.__("greet")).toBe("Hallo"); // stale "fr" load did NOT clobber
   });
 
   it("logs and resolves cleanly when the loader rejects", async () => {
@@ -203,23 +225,34 @@ describe("setLocale / getLocale", () => {
         throw new Error("boom");
       },
     });
+    const result = mountHook(m);
 
-    await expect(m.setLocale("en")).resolves.toBeUndefined();
+    await act(async () => {
+      await expect(result.current.setLocale("en")).resolves.toBeUndefined();
+    });
 
     expect(err).toHaveBeenCalledWith(
       expect.stringContaining('Failed to load locale "en"'),
       expect.any(Error),
     );
-    expect(m.getLocale()).toBe("en"); // currentLocale is set synchronously
+    // currentLocale is set synchronously in applyLocale even though load rejected;
+    // a fresh hook mount reads the module state as-is.
+    expect(mountHook(m).current.locale).toBe("en");
   });
 
   it("re-init with a different storageKey uses the new key", async () => {
     const m = await fresh();
     m.init({ en: { a: "A" } }, { storageKey: "k1" });
-    m.setLocale("en");
+    let result = mountHook(m);
+    await act(async () => {
+      await result.current.setLocale("en");
+    });
 
     m.init({ en: { a: "A" }, fr: { b: "B" } }, { storageKey: "k2" });
-    m.setLocale("fr");
+    result = mountHook(m);
+    await act(async () => {
+      await result.current.setLocale("fr");
+    });
 
     expect(localStorage.getItem("k2")).toBe("fr");
     // The previous key is not migrated or cleared — an explicit, testable contract.
@@ -232,7 +265,7 @@ describe("auto-selection on init", () => {
     setBrowserLanguages("fr-FR");
     const m = await fresh();
     m.init({ en: { a: "A" }, fr: { b: "B" } });
-    expect(m.getLocale()).toBe("fr");
+    expect(mountHook(m).current.locale).toBe("fr");
   });
 
   it("prefers a stored preference over browser detection", async () => {
@@ -240,7 +273,7 @@ describe("auto-selection on init", () => {
     setBrowserLanguages("en-US");
     const m = await fresh();
     m.init({ en: { a: "A" }, fr: { b: "B" } });
-    expect(m.getLocale()).toBe("fr");
+    expect(mountHook(m).current.locale).toBe("fr");
   });
 
   it("ignores a stored preference that is no longer registered", async () => {
@@ -248,6 +281,6 @@ describe("auto-selection on init", () => {
     setBrowserLanguages("en-US");
     const m = await fresh();
     m.init({ en: { a: "A" } });
-    expect(m.getLocale()).toBe("en"); // fell back to browser detection
+    expect(mountHook(m).current.locale).toBe("en"); // fell back to browser detection
   });
 });

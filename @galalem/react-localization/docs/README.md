@@ -6,7 +6,7 @@ README is the elevator pitch and quick start; this guide is the reference.
 **Contents**
 
 1. [Mental model](#1-mental-model)
-2. [Choosing between `__`, `<T>`, and `useLocale`](#2-choosing-between-__-t-and-uselocale)
+2. [Choosing between `useLocale` and `<T>`](#2-choosing-between-uselocale-and-t)
 3. [Init recipes](#3-init-recipes)
 4. [Common tasks](#4-common-tasks)
 5. [Troubleshooting](#5-troubleshooting)
@@ -29,72 +29,68 @@ in your head, every surprise makes sense.
 │   currentLocale: string | undefined              ← what setLocale intends       │
 │                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
-        ▲                        ▲                                     │
-        │ reads                  │ subscribes                          │ writes
-        │                        │                                     ▼
-┌──────────────────┐   ┌──────────────────────┐         ┌───────────────────────────┐
-│ Stateless reads  │   │ Reactive reads       │         │ Writes                    │
-│                  │   │                      │         │                           │
-│ __("Save")       │   │ <T>Save</T>          │         │ init(...)                 │
-│ getLocale()      │   │ useLocale()          │         │ setLocale("fr")           │
-│ detectLocale()   │   │                      │         │ setTranslations({...})    │
-│ getSupportedLocales() │                     │         │                           │
-└──────────────────┘   └──────────────────────┘         └───────────────────────────┘
+        ▲                              │
+        │ subscribes                   │ writes
+        │                              ▼
+┌────────────────────────┐   ┌───────────────────────────┐
+│ Reactive reads         │   │ Writes                    │
+│                        │   │                           │
+│ <T>Save</T>            │   │ init(...)                 │
+│ useLocale()            │   │ useLocale().setLocale(..) │
+│   .__("Save")          │   │ setTranslations({...})    │
+│   .locale              │   │                           │
+│   .getSupportedLocales │   │                           │
+└────────────────────────┘   └───────────────────────────┘
 ```
 
-**Stateless reads** just look at the globals. Safe anywhere — utility modules,
-event handlers, `console.log`, non-React code.
-
-**Reactive reads** register a subscriber via `useSyncExternalStore`. When a
-`setLocale` load resolves, the library walks the subscriber set and every
-subscribed component re-renders against the new dictionary.
+**All reads go through `useLocale()`** (or `<T>`, which uses it internally).
+Reading any field of the hook's return subscribes the calling component via
+`useSyncExternalStore` — so when a `setLocale` load resolves and swaps the
+active dictionary, every subscribed component re-renders against the new one.
 
 **Writes** mutate the globals. `setLocale` is the only write that also notifies
 subscribers (and only after the dictionary swap succeeds — a failed load
 doesn't fire a re-render).
 
-Why this matters: if a component using `__` doesn't re-render after
-`setLocale`, it's because that component never subscribed. Wrap the string in
-`<T>` or add a `useLocale()` call — see §2.
+Why the hook-only shape: exposing `__` as a free import let components
+translate without subscribing. Those components rendered the correct string on
+first mount and then went stale after every `setLocale`. Returning `__` from
+the hook makes the subscription mandatory by construction — if you have the
+translator, you're subscribed.
 
 ---
 
-## 2. Choosing between `__`, `<T>`, and `useLocale`
+## 2. Choosing between `useLocale` and `<T>`
 
-Three ways to reach the same dictionary. Pick by context, not preference.
+Two ways to reach the same dictionary. Pick by context, not preference.
 
 | Situation | Use | Why |
 |---|---|---|
-| Plain text child in JSX | `<T>Save</T>` | Auto-subscribes. One line, no ceremony. |
-| String inside a JSX attribute (`placeholder`, `aria-label`, `title`, etc.) | `useLocale()` + `__(...)` inside the component | `<T>` returns JSX, not a string, so it can't go in an attribute. |
-| String built from concatenation or template literals | `useLocale()` + `__(...)` in the component | Same reason — you need a string value. |
-| Outside React (utility, event handler, notification body, form validation) | `__(...)` alone | Not in a render tree; nothing to re-render. Fires with whatever's active. |
-| Rendering the current locale itself | `const locale = useLocale();` | Its return value is the current locale; the subscription is the side benefit. |
+| Plain text child in JSX | `<T>Save</T>` | One-liner, no destructuring, subscribes automatically. |
+| String inside a JSX attribute (`placeholder`, `aria-label`, `title`, etc.) | `useLocale().__(...)` | `<T>` returns JSX, not a string, so it can't go in an attribute. |
+| String built from concatenation or template literals | `useLocale().__(...)` | Same reason — you need a string value. |
+| Reading or switching the active locale | `useLocale().locale` / `useLocale().setLocale(...)` | Both live on the hook. |
 
 Concrete:
 
 ```tsx
-import { __, T, useLocale } from "@galalem/react-localization";
+import { T, useLocale } from "@galalem/react-localization";
 
-// JSX child — auto re-renders.
-<button><T>Save</T></button>
-
-// JSX attribute — need the string, so use __ and subscribe explicitly.
 function Field() {
-  useLocale();
-  return <input placeholder={__("Search")} aria-label={__("Search")} />;
-}
-
-// Outside React — no subscription needed.
-function onSaveClick() {
-  toast.success(__("Saved"));
+  const { __ } = useLocale();
+  return (
+    <>
+      <label><T>Search</T></label>
+      <input placeholder={__("Search")} aria-label={__("Search")} />
+    </>
+  );
 }
 ```
 
-**Don't do this:** `<span>{__("Save")}</span>` in a component that never calls
-`useLocale()` and has no `<T>` anywhere in its tree. The text is correct on
-first render but never updates. Either wrap in `<T>` or add `useLocale()` at
-the top of the component.
+**Outside components?** There's no `__` free export by design. Utility modules,
+event handlers in non-React files, and service-layer code get their translator
+via a prop, a param, or by moving the call into a component that has already
+called `useLocale`. This is a deliberate trade-off — see [§6](#why-the-hook-only-shape).
 
 ---
 
@@ -189,19 +185,17 @@ init(source, { storageKey: "myapp:lang" });
 
 ### A language switcher UI
 
-Uses `getSupportedLocales`, `useLocale`, and `setLocale`. `useLocale` gives you
-the active value AND the re-render subscription in one line.
+Everything comes from one `useLocale()` call:
 
 ```tsx
-import { setLocale, useLocale, getSupportedLocales } from "@galalem/react-localization";
+import { useLocale } from "@galalem/react-localization";
 
 export function LanguageSwitcher() {
-  const active = useLocale();
-  const locales = getSupportedLocales();
+  const { locale, setLocale, getSupportedLocales } = useLocale();
 
   return (
-    <select value={active ?? ""} onChange={(e) => setLocale(e.target.value)}>
-      {locales.map((code) => (
+    <select value={locale ?? ""} onChange={(e) => setLocale(e.target.value)}>
+      {getSupportedLocales().map((code) => (
         <option key={code} value={code}>{code}</option>
       ))}
     </select>
@@ -239,27 +233,34 @@ the render silently uses the source string. To surface those, grep your
 locale JSONs for missing keys against a canonical list — or add a small script
 that compares each locale's key set to `en`'s.
 
-### Testing components that use `<T>` / `__`
+### Testing components that use `<T>` / `useLocale`
 
-You don't need `init` in tests. Import `setTranslations` and hand-set the dict
-in a `beforeEach`:
+The `useLocale` hook exposes everything you need — `renderHook` gives you an
+imperative handle:
 
 ```tsx
-import { beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { setTranslations, T } from "@galalem/react-localization";
+import { act, render, renderHook, screen } from "@testing-library/react";
+import { init, useLocale, T } from "@galalem/react-localization";
 
-beforeEach(() => setTranslations({ Save: "Guardar" }));
+it("renders in Spanish", async () => {
+  init({ es: { Save: "Guardar" } });
+  const { result } = renderHook(() => useLocale());
+  await act(async () => {
+    await result.current.setLocale("es");
+  });
 
-it("renders in Spanish", () => {
   render(<T>Save</T>);
   expect(screen.getByText("Guardar")).toBeTruthy();
 });
 ```
 
-For `useLocale` + re-render tests, use `vi.resetModules()` + a dynamic
-`import("@galalem/react-localization")` per test to reset the singletons.
-See this package's own `src/index.test.tsx` for a working pattern.
+For test isolation across the shared singletons, use `vi.resetModules()` + a
+dynamic `import("@galalem/react-localization")` per test. See this package's
+own `tests/index.test.tsx` for a working pattern.
+
+`setTranslations` is still exported as a low-level primitive if you need to
+plant a dictionary without going through a loader — but it does **not** notify
+subscribers, so it's only useful for pre-render seed data, not mid-test swaps.
 
 ### SSR / SSG
 
@@ -342,16 +343,25 @@ as-is" sentinel; empty string is not.
 brand names). The library also logs a `console.warn` on locale load listing
 every empty-string value.
 
-### `<T>Hello</T>` doesn't re-render when I call `setLocale`
+### `<T>Hello</T>` or `__("Hello")` doesn't re-render on the first `setLocale`
 
-Should not happen — `<T>` calls `useLocale()` internally. If you're on a
-version older than v0.1.0, upgrade. Also check: are you rendering `<T>` at
-all, or using `__("Hello")` directly? If the latter, add `useLocale()` at the
-top of the component or switch to `<T>`.
+**Cause pre-v0.3.0.** `useLocale` used `currentLocale` as its snapshot, but
+`applyLocale` sets `currentLocale` synchronously *before* the async load
+resolves. So by the time the load finished and subscribers were notified, the
+snapshot value hadn't changed and `useSyncExternalStore` bailed out. The
+translation would flash the key on first render and stay stale until any
+unrelated state update forced a re-render.
+
+**Fix.** Upgrade to v0.3.0+ — the snapshot is now the `translations`
+reference, which the load swap actually mutates.
+
+If you're on v0.3.0+ and still seeing stale text, confirm you're translating
+via `<T>` or a `useLocale().__` call (not an old free `__` import — that
+export was removed in v0.3.0).
 
 ### `useSyncExternalStore is not a function`
 
-**Cause.** React version is below 18. The library requires React ≥ 18 (both
+**Cause.** React version is below 19. The library requires React ≥ 19 (both
 for the hook and for stable concurrent-mode semantics).
 
 **Fix.** Upgrade React.
@@ -361,8 +371,8 @@ for the hook and for stable concurrent-mode semantics).
 **Cause.** You passed a locale code that wasn't registered via `init`. The
 library warns and returns a resolved promise without changing anything.
 
-**Fix.** Check `getSupportedLocales()` before calling `setLocale`, or register
-the locale in `init`.
+**Fix.** Check `getSupportedLocales()` (from the same `useLocale()` call)
+before invoking `setLocale`, or register the locale in `init`.
 
 ---
 
@@ -370,16 +380,34 @@ the locale in `init`.
 
 ### Why a module singleton, not React Context?
 
-Context requires every consumer of `__` to be inside a Provider tree. That
-breaks the "call `__` anywhere" model — utility functions, event handlers,
-service-layer code, non-React modules. A module singleton lets a single
-import work everywhere, and pairs with `useSyncExternalStore` to give React
-components the reactivity they need without forcing Provider wrapping on the
-whole app.
+A Context around the whole app would provide reactivity, but only through
+components that either don't `React.memo` or that read the context themselves
+via `useContext`. A memoized subtree still goes stale unless it opts in — the
+same footgun as the module-global-with-no-subscribe pattern, dressed
+differently.
+
+A module singleton paired with `useSyncExternalStore` gives every subscriber
+the same guarantee regardless of memoization: subscribe once, re-render on
+every dictionary swap. No provider tree required.
 
 The trade-off is **process-wide state**. That's fine for client apps and
 single-locale-per-process servers. It is not fine for multi-tenant SSR — see
 §4's SSR note.
+
+### Why the hook-only shape
+
+Earlier versions exported `__` as a free function so utility code and
+non-React modules could translate too. In practice this let components read
+translations without subscribing, so they'd flash the key on first render and
+stay stale after every `setLocale`. Every user hit this at least once.
+
+Returning `__` from `useLocale()` makes the subscription mandatory by
+construction — you can't have the translator without the subscription. The
+cost is that non-render callers (form validation modules, notification
+services) can no longer `import { __ }` and go: they need to be handed `__`
+from a component that has already called `useLocale`. That's an explicit,
+narrow trade for eliminating the whole class of "why isn't this
+re-rendering?" bug reports.
 
 ### Why a Vite plugin, not runtime file scanning?
 

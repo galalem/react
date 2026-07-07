@@ -1,6 +1,6 @@
 # @galalem/react-localization
 
-Dead-simple React localization. One function, one component, one global dictionary — with
+Dead-simple React localization. One hook, one component, one global dictionary — with
 optional multi-locale loading and a Vite plugin for zero-boilerplate setup.
 
 ## Install
@@ -9,7 +9,7 @@ optional multi-locale loading and a Vite plugin for zero-boilerplate setup.
 npm i @galalem/react-localization
 ```
 
-Requires React `>=18`. The Vite plugin is optional (only if you want the folder sugar).
+Requires React `>=19`. The Vite plugin is optional (only if you want the folder sugar).
 
 > Looking for deeper docs? See **[docs/](./docs/)** — mental model, init
 > recipes, common tasks, troubleshooting, and architecture notes.
@@ -40,14 +40,15 @@ Drop one JSON file per locale into `src/lang/` (the default folder):
 { "hello": "Hola", "John": null }
 ```
 
-Initialize once, then translate with `__` (function) or `<T>` (component):
+Initialize once, then translate with `<T>` (component) or `__` from the `useLocale()` hook:
 
 ```tsx
-import { init, __, T } from "@galalem/react-localization";
+import { init, T, useLocale } from "@galalem/react-localization";
 
 init({ folder: "src/lang" }); // registers en + es, picks the user's locale automatically
 
 function Greeting({ name }: { name?: string }) {
+  const { __ } = useLocale();
   return (
     <div>
       <T>hello</T> {name || __("John")}
@@ -61,15 +62,23 @@ while `John` stays as-is because its value is `null` (see [Values](#values)).
 
 ## Translating
 
-Use the function anywhere, the component in JSX:
+`<T>` for plain JSX children, `useLocale().__` for anything that needs a string (attributes,
+interpolation, non-JSX contexts):
 
 ```tsx
-import { __, T, Text, Translate } from "@galalem/react-localization";
+import { T, Text, Translate, useLocale } from "@galalem/react-localization";
 
-__("Save");
-<T>Save</T>
-<Text>Save</Text>       // alias of <T>
-<Translate>Save</Translate> // alias of <T>
+function Save() {
+  const { __ } = useLocale();
+  return (
+    <>
+      <button><T>Save</T></button>
+      <button><Text>Save</Text></button>          {/* alias of <T> */}
+      <button><Translate>Save</Translate></button> {/* alias of <T> */}
+      <input placeholder={__("Search")} />
+    </>
+  );
+}
 ```
 
 `Text` and `Translate` are aliases of `T` — pick whichever reads best. (The component must
@@ -77,23 +86,24 @@ be capitalized: `<t>` is a DOM tag in JSX, not a component.)
 
 ### Reacting to locale changes
 
-`<T>` (and its aliases) **auto-re-render** when `setLocale` swaps the active dictionary — you
-don't have to do anything.
+Both `<T>` and `useLocale()` subscribe the calling component to the active dictionary. When
+`setLocale` swaps it, every subscribed component re-renders automatically — you don't have
+to do anything.
 
-For components that use the `__` function form instead, call `useLocale()` once inside the
-component to subscribe it to locale changes:
+Because `__` is returned from `useLocale()`, there's no way to accidentally read it without
+subscribing: a component that calls `useLocale()` is always re-render-aware.
 
 ```tsx
-import { __, useLocale } from "@galalem/react-localization";
+import { useLocale } from "@galalem/react-localization";
 
 function Save() {
-  useLocale();                       // subscribes this component to setLocale
+  const { __ } = useLocale();
   return <button>{__("Save")}</button>;
 }
 ```
 
-`useLocale()` returns the current locale (same as `getLocale()`), but its main job is the
-subscription — the return value is a bonus if you want to render locale-conditional UI.
+The hook returns `{ __, locale, setLocale, getSupportedLocales }`. `locale` is the current
+locale code (or `undefined`); the other two are covered in [Multiple locales](#multiple-locales).
 
 ## Values
 
@@ -110,17 +120,26 @@ non-translations; empty strings trigger a non-blocking `console.warn` when a loc
 
 ## Multiple locales
 
-Register locales with `init`, then switch with `setLocale`:
+Register locales with `init`, then switch with `setLocale` from the `useLocale` hook:
 
 ```tsx
-import { init, setLocale } from "@galalem/react-localization";
+import { init, useLocale } from "@galalem/react-localization";
 
 init({
   en: { "hello world": "Hello world" },      // inline translations
   fr: () => import("./locales/fr.json"),      // lazy loader
 });
 
-setLocale("fr"); // loads (if needed) and makes it the active dictionary
+function LanguageSwitcher() {
+  const { setLocale, getSupportedLocales, locale } = useLocale();
+  return (
+    <select value={locale ?? ""} onChange={(e) => setLocale(e.target.value)}>
+      {getSupportedLocales().map((code) => (
+        <option key={code} value={code}>{code}</option>
+      ))}
+    </select>
+  );
+}
 ```
 
 Loaders are called on first use and cached. Inline and loader entries can be mixed freely.
@@ -132,19 +151,23 @@ Loaders are called on first use and cached. Inline and loader entries can be mix
 1. A previously **stored** preference (from an earlier `setLocale`), if it's still registered.
 2. Otherwise the best match for the **browser's** languages (`navigator.languages`).
 
-Use `setLocale` for explicit user choices (e.g. a language switcher): it activates the locale
-**and** persists it to `localStorage`, so the choice survives reloads. Auto-detected locales
-are not persisted.
+Use `setLocale` (from `useLocale`) for explicit user choices (e.g. a language switcher): it
+activates the locale **and** persists it to `localStorage`, so the choice survives reloads.
+Auto-detected locales are not persisted.
 
 ```tsx
-import { init, setLocale, getLocale, detectLocale } from "@galalem/react-localization";
+import { init, detectLocale, useLocale } from "@galalem/react-localization";
 
 init({ en: { hello: "Hello" }, fr: () => import("./locales/fr.json") });
 // active locale is now the stored preference, or the browser's best match
 
-getLocale();           // "en" | "fr" | undefined — the current locale
 detectLocale();        // best browser match among registered locales, or undefined
-await setLocale("fr"); // switch + persist; resolves once applied (awaiting is optional)
+
+function Example() {
+  const { locale, setLocale } = useLocale();
+  // locale === "en" | "fr" | undefined — the current locale
+  // await setLocale("fr"); // switch + persist; resolves once applied (awaiting is optional)
+}
 ```
 
 `setLocale` returns a promise that settles when the switch has been applied. Awaiting is
@@ -188,7 +211,7 @@ At build time these are rewritten into an explicit lazy-loader map. Notes:
 ## Scope & when to graduate
 
 This package is deliberately small: string keys → string values, one active locale per
-process. That covers static UI text in most apps and keeps the API to two names (`__`, `<T>`).
+process. That covers static UI text in most apps and keeps the API to two names (`useLocale`, `<T>`).
 
 Reach for a heavier library when you need:
 
@@ -205,16 +228,22 @@ or [Lingui](https://lingui.dev/). All three do the things this package deliberat
 
 | Export                | Signature                                              | Description                                             |
 | --------------------- | ------------------------------------------------------ | ------------------------------------------------------- |
-| `__`                  | `(key: string) => string`                              | Translate a string, or return it unchanged.             |
-| `T` / `Text` / `Translate` | `({ children }: { children: string }) => ReactElement` | Component form of `__`.                            |
+| `useLocale`           | `() => LocaleAPI`                                      | React hook: returns `{ __, locale, setLocale, getSupportedLocales }` and subscribes the calling component to locale changes. |
+| `T` / `Text` / `Translate` | `({ children }: { children: string }) => ReactElement` | Component form of `__`. Subscribes internally.     |
 | `init`                | `(options?, settings?: InitSettings) => void`          | Register locales (+ optional `{ storageKey }`); folder sugar needs the Vite plugin. |
-| `setLocale`           | `(locale: string) => Promise<void>`                    | Switch + persist the locale; resolves once applied.     |
-| `getLocale`           | `() => string \| undefined`                            | The currently selected locale.                          |
-| `useLocale`           | `() => string \| undefined`                            | React hook: subscribes the calling component to `setLocale`. `<T>` already uses this internally. |
 | `detectLocale`        | `() => string \| undefined`                            | Best browser-language match among registered locales.   |
 | `load`                | `(locale: string) => Promise<Translations>`            | Resolve (and cache) a locale's translations.            |
+| `setTranslations`     | `(next: Translations) => void`                         | Replace the active dictionary. Low-level primitive — normally `setLocale` handles this. Does not notify subscribers. |
+
+**Hook return (`LocaleAPI`):**
+
+| Field                 | Signature                                              | Description                                             |
+| --------------------- | ------------------------------------------------------ | ------------------------------------------------------- |
+| `__`                  | `(key: string) => string`                              | Translate a string, or return it unchanged.             |
+| `locale`              | `string \| undefined`                                  | The currently selected locale.                          |
+| `setLocale`           | `(locale: string) => Promise<void>`                    | Switch + persist the locale; resolves once applied.     |
 | `getSupportedLocales` | `() => string[]`                                       | Locales registered via `init`.                          |
 
-**Types:** `Translations`, `LocaleLoader`, `LocaleSource`, `InitOptions`, `InitSettings`.
+**Types:** `Translations`, `LocaleLoader`, `LocaleSource`, `InitOptions`, `InitSettings`, `LocaleAPI`.
 
 **Plugin:** `ReactLocalizationPlugin` — imported from `@galalem/react-localization/vite`.
