@@ -1,6 +1,6 @@
 {
   "name": "@galalem/react-router",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Plug-and-play React router with first-class auth and RBAC. Declare access on the route, not in wrappers.",
   "license": "MIT",
   "author": "Galalem",
