@@ -23,7 +23,12 @@ jobs:
           node-version: 24
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
-      - run: npm i -g npm@latest       # trusted publishing needs npm >= 11.5.1
+      # Pin npm: 11.5.1 is the first version with trusted-publishing (OIDC) support,
+      # and later 11.x releases changed publish error output in a way that trips
+      # @changesets/cli@2.31.0's `isAlreadyPublishedError` (throws
+      # `TypeError: Cannot read properties of undefined (reading 'includes')`).
+      # Revisit once @changesets/cli ships a fix for the new output format.
+      - run: npm i -g npm@11.5.1
       - run: pnpm install --frozen-lockfile
       - name: Create Release PR or Publish
         uses: changesets/action@v1
