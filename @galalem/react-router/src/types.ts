@@ -79,8 +79,8 @@ export type RouteGroup = {
 export type RouteEntry = Route | RouteGroup;
 
 export type AuthConfig = {
-  currentUser: () => unknown;
-  userRoles?: (user: unknown) => string[];
+  currentUser: () => unknown | Promise<unknown>;
+  userRoles?: (user: unknown) => string[] | Promise<string[]>;
   loginPath: string;
   /**
    * Query-param name used to preserve the intended URL when auth redirects a user

@@ -280,6 +280,131 @@ describe("createRouter — guards", () => {
   });
 });
 
+describe("createRouter — async auth config", () => {
+  it("awaits an async currentUser before running guards", async () => {
+    const router = trackRouter(
+      createRouter({
+        auth: {
+          currentUser: async () => ({ id: 1 }),
+          loginPath: "/login",
+        },
+        routes: [
+          { path: "/login", component: Login },
+          { path: "/dashboard", component: Dashboard, auth: true },
+        ],
+      }),
+    );
+    router.push("/dashboard");
+    await router.ready;
+    await flush();
+    expect(router.getState().path).toBe("/dashboard");
+    expect(router.getState().component).toBe(Dashboard);
+  });
+
+  it("redirects to loginPath when async currentUser resolves to null", async () => {
+    window.history.replaceState({}, "", "/dashboard");
+    const router = trackRouter(
+      createRouter({
+        auth: {
+          currentUser: async () => null,
+          loginPath: "/login",
+        },
+        routes: [
+          { path: "/login", component: Login },
+          { path: "/dashboard", component: Dashboard, auth: true },
+        ],
+      }),
+    );
+    await router.ready;
+    expect(router.getState().path).toBe("/login");
+    expect(router.getState().component).toBe(Login);
+  });
+
+  it("awaits an async userRoles for role-gated routes", async () => {
+    const router = trackRouter(
+      createRouter({
+        auth: {
+          currentUser: async () => ({ id: 1 }),
+          userRoles: async () => ["admin"],
+          loginPath: "/login",
+        },
+        routes: [
+          { path: "/login", component: Login },
+          { path: "/admin", component: Admin, auth: true, roles: ["admin"] },
+        ],
+      }),
+    );
+    router.push("/admin");
+    await router.ready;
+    await flush();
+    expect(router.getState().path).toBe("/admin");
+    expect(router.getState().component).toBe(Admin);
+  });
+
+  it("renders 403 when async userRoles resolves without the required role", async () => {
+    const router = trackRouter(
+      createRouter({
+        auth: {
+          currentUser: async () => ({ id: 1 }),
+          userRoles: async () => ["viewer"],
+          loginPath: "/login",
+        },
+        routes: [
+          { path: "/login", component: Login },
+          { path: "/admin", component: Admin, auth: true, roles: ["admin"] },
+        ],
+      }),
+    );
+    router.push("/admin");
+    await router.ready;
+    await flush();
+    expect(router.getState().path).toBe("/admin");
+    expect(router.getState().error).toBe(403);
+    expect(router.getState().component).toBeNull();
+  });
+
+  it("passes the resolved async user through RouteContext to custom guards", async () => {
+    let seenUser: unknown = "not captured";
+    const capture: Guard = (ctx) => {
+      seenUser = ctx.user;
+      return true;
+    };
+    const router = trackRouter(
+      createRouter({
+        auth: {
+          currentUser: async () => ({ id: 42, name: "Ada" }),
+          loginPath: "/login",
+        },
+        routes: [
+          { path: "/", component: Home, guards: [capture] },
+        ],
+      }),
+    );
+    await router.ready;
+    expect(seenUser).toEqual({ id: 42, name: "Ada" });
+  });
+
+  it("still accepts sync currentUser / userRoles (backwards compatible)", async () => {
+    const router = trackRouter(
+      createRouter({
+        auth: {
+          currentUser: () => ({ roles: ["admin"] }),
+          userRoles: (user) => (user as { roles: string[] }).roles,
+          loginPath: "/login",
+        },
+        routes: [
+          { path: "/login", component: Login },
+          { path: "/admin", component: Admin, auth: true, roles: ["admin"] },
+        ],
+      }),
+    );
+    router.push("/admin");
+    await router.ready;
+    await flush();
+    expect(router.getState().component).toBe(Admin);
+  });
+});
+
 describe("createRouter — subscribers", () => {
   it("notifies subscribers on navigation", async () => {
     const router = trackRouter(

@@ -17,8 +17,8 @@ function buildLoginRedirect(
 }
 
 export function authGuard(configuration: AuthConfig): Guard {
-  return (context) => {
-    const user = configuration.currentUser();
+  return async (context) => {
+    const user = await configuration.currentUser();
     if (user == null) return { redirect: buildLoginRedirect(configuration, context) };
     return true;
   };
@@ -28,8 +28,8 @@ export function rolesGuard(
   requiredRoles: string[],
   configuration: AuthConfig,
 ): Guard {
-  return (context) => {
-    const user = configuration.currentUser();
+  return async (context) => {
+    const user = await configuration.currentUser();
     if (user == null) return { redirect: buildLoginRedirect(configuration, context) };
     if (requiredRoles.length === 0) return true;
 
@@ -39,7 +39,7 @@ export function rolesGuard(
       );
     }
 
-    const userRoles = configuration.userRoles(user);
+    const userRoles = await configuration.userRoles(user);
     if (evaluateRoleExpression(requiredRoles, userRoles)) return true;
     return { deny: true };
   };

@@ -27,8 +27,8 @@ Parent-group guards run before child-route guards.
 ```ts
 createRouter({
   auth: {
-    currentUser: () => authStore.user(),        // required
-    userRoles: (user) => (user as User).roles,  // required if any route uses `roles`
+    currentUser: () => authStore.user(),        // required — sync or async
+    userRoles: (user) => (user as User).roles,  // required if any route uses `roles` — sync or async
     loginPath: "/login",                        // where authGuard redirects
     redirectParam: "redirectUrl",               // default; false disables
   },
@@ -36,9 +36,24 @@ createRouter({
 });
 ```
 
-**`currentUser`** is called every navigation. Return `null` / `undefined` for logged-out. Return anything else — an object, a token, a string — for logged-in. The router doesn't care about the shape.
+Either hook may return a promise, which the router awaits before deciding on a navigation — handy when the session lives behind a fetch or a token refresh:
 
-**`userRoles`** is only needed if any route uses `roles`. It extracts a role list from whatever `currentUser` returns.
+```ts
+createRouter({
+  auth: {
+    currentUser: async () => (await api.session()).user,
+    userRoles: async (user) => await api.rolesFor(user),
+    loginPath: "/login",
+  },
+  routes: [/* ... */],
+});
+```
+
+The router awaits `currentUser` and `userRoles` on every navigation — cache them yourself (module-level promise, SWR, whatever) if the lookup is expensive.
+
+**`currentUser`** is called every navigation. Return `null` / `undefined` for logged-out. Return anything else — an object, a token, a string — for logged-in. The router doesn't care about the shape. It may be sync **or** async (`Promise<User | null>`); guards await the result.
+
+**`userRoles`** is only needed if any route uses `roles`. It extracts a role list from whatever `currentUser` returns. It may also be sync or async.
 
 **`loginPath`** is where `authGuard` sends unauthenticated users.
 
