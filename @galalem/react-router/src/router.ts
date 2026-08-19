@@ -143,12 +143,14 @@ export function createRouter(options: CreateRouterOptions): Router {
     }
 
     const guards = guardsByRoute.get(match.route)!;
+    const user = options.auth ? (await options.auth.currentUser()) ?? null : null;
+    if (generation !== navigationGeneration) return;
     const context = {
       path,
       search,
       hash,
       params: match.params,
-      user: options.auth?.currentUser() ?? null,
+      user,
       data,
     };
 
