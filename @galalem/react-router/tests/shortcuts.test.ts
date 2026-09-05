@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ComponentType, ReactNode } from "react";
 import type { Guard, LayoutComponent } from "../src/types";
-import { auth, guards, layout, prefix, roles } from "../src/shortcuts";
+import { auth, guards, layout, lazy, prefix, roles } from "../src/shortcuts";
 
 const Home: ComponentType = () => null;
 const Users: ComponentType = () => null;
@@ -75,5 +75,11 @@ describe("shortcuts", () => {
         },
       ],
     });
+  });
+
+  it("lazy wraps a loader into a `{ lazy }` object without invoking it", () => {
+    const loader = async () => Home;
+    const wrapped = lazy(loader);
+    expect(wrapped).toEqual({ lazy: loader });
   });
 });

@@ -1,6 +1,7 @@
 import type {
   Guard,
   LayoutComponent,
+  LazyLoader,
   RouteEntry,
   RouteGroup,
 } from "./types";
@@ -29,4 +30,14 @@ export function layout(component: LayoutComponent, children: Children): RouteGro
 
 export function guards(list: Guard[], children: Children): RouteGroup {
   return { guards: list, children: toArray(children) };
+}
+
+/**
+ * Shorthand for a `{ lazy }` loader — turns
+ * `{ component: { lazy: () => import("./page") } }` into
+ * `{ component: lazy(() => import("./page")) }`. Works on `layout` the
+ * same way.
+ */
+export function lazy<T = {}>(loader: LazyLoader<T>["lazy"]): LazyLoader<T> {
+  return { lazy: loader };
 }

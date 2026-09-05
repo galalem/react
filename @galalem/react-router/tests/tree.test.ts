@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ComponentType, ReactNode } from "react";
 import type { Guard, LayoutComponent } from "../src/types";
 import { flattenRoutes } from "../src/tree";
@@ -278,6 +278,43 @@ describe("flattenRoutes", () => {
 
       expect(result[0]).toMatchObject({ path: "/", auth: false });
       expect(result[1]).toMatchObject({ path: "/admin/users", auth: true });
+    });
+  });
+
+  describe("lazy components", () => {
+    it("wraps a `{ lazy }` component into a React.lazy without invoking the loader", () => {
+      const loader = vi.fn(async () => ({ default: Home }));
+      const result = flattenRoutes([
+        { path: "/admin", component: { lazy: loader } },
+      ]);
+
+      expect(result).toHaveLength(1);
+      // React.lazy returns a special lazy exotic component (an object with a
+      // `$$typeof` symbol, not a plain function).
+      expect(typeof result[0].component).toBe("object");
+      expect(loader).not.toHaveBeenCalled();
+    });
+
+    it("wraps a `{ lazy }` layout at group-flatten time without invoking the loader", () => {
+      const LazyShell: ComponentType<{ children: ReactNode }> = ({ children }) =>
+        children as ReactNode as null;
+      const loader = vi.fn(async () => ({ default: LazyShell }));
+      const result = flattenRoutes([
+        {
+          layout: { lazy: loader },
+          children: [{ path: "/x", component: Home }],
+        },
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].layouts).toHaveLength(1);
+      expect(typeof result[0].layouts[0]).toBe("object");
+      expect(loader).not.toHaveBeenCalled();
+    });
+
+    it("leaves a bare component untouched", () => {
+      const result = flattenRoutes([{ path: "/", component: Home }]);
+      expect(result[0].component).toBe(Home);
     });
   });
 });

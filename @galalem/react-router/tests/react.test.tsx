@@ -695,6 +695,147 @@ describe("RouterProvider — setMeta DOM sync", () => {
   });
 });
 
+describe("RouterProvider — lazy routes", () => {
+  it("renders the fallback while a lazy route's chunk is loading, then the component", async () => {
+    let resolveLoader!: (value: { default: typeof Dashboard }) => void;
+    const loader = vi.fn(
+      () =>
+        new Promise<{ default: typeof Dashboard }>((resolve) => {
+          resolveLoader = resolve;
+        }),
+    );
+    const router = trackRouter(
+      createRouter({
+        suspenseFallback: <div data-testid="spinner">loading</div>,
+        routes: [{ path: "/", component: { lazy: loader } }],
+      }),
+    );
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+
+    expect(screen.getByTestId("spinner")).toBeDefined();
+    expect(loader).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      resolveLoader({ default: Dashboard });
+    });
+    expect(screen.getByTestId("dashboard")).toBeDefined();
+  });
+
+  it("keeps the layout mounted while the page's chunk loads", async () => {
+    let resolveLoader!: (value: { default: typeof Dashboard }) => void;
+    const loader = () =>
+      new Promise<{ default: typeof Dashboard }>((resolve) => {
+        resolveLoader = resolve;
+      });
+    const router = trackRouter(
+      createRouter({
+        suspenseFallback: <div data-testid="spinner">loading</div>,
+        routes: [
+          {
+            layout: AppShell,
+            children: [{ path: "/", component: { lazy: loader } }],
+          },
+        ],
+      }),
+    );
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+
+    const shell = screen.getByTestId("shell");
+    const spinner = screen.getByTestId("spinner");
+    expect(shell.contains(spinner)).toBe(true);
+
+    await act(async () => {
+      resolveLoader({ default: Dashboard });
+    });
+    expect(screen.getByTestId("shell").contains(screen.getByTestId("dashboard"))).toBe(
+      true,
+    );
+  });
+
+  it("accepts a loader that returns the component directly (no default wrapper)", async () => {
+    const router = trackRouter(
+      createRouter({
+        routes: [{ path: "/", component: { lazy: async () => Home } }],
+      }),
+    );
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+    expect(screen.getByTestId("home")).toBeDefined();
+  });
+
+  it("supports a lazy layout — the same `{ lazy }` shape works on `layout`", async () => {
+    const LazyShell = ({ children }: { children: ReactNode }) => (
+      <div data-testid="lazy-shell">lazy-shell:{children}</div>
+    );
+    const router = trackRouter(
+      createRouter({
+        suspenseFallback: <div data-testid="spinner">loading</div>,
+        routes: [
+          {
+            layout: { lazy: async () => LazyShell },
+            children: [{ path: "/", component: Home }],
+          },
+        ],
+      }),
+    );
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+    expect(
+      screen.getByTestId("lazy-shell").contains(screen.getByTestId("home")),
+    ).toBe(true);
+  });
+
+  it("does not invoke the loader when a guard rejects the route", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const loader = vi.fn(async () => ({ default: Dashboard }));
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/", component: Home },
+          {
+            path: "/admin",
+            component: { lazy: loader },
+            guards: [() => ({ deny: true })],
+          },
+        ],
+      }),
+    );
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+    expect(screen.getByText(/403/)).toBeDefined();
+    expect(loader).not.toHaveBeenCalled();
+  });
+
+  it("does not invoke the loader when a guard redirects to a different route", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const loader = vi.fn(async () => ({ default: Dashboard }));
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/", component: Home },
+          {
+            path: "/admin",
+            component: { lazy: loader },
+            guards: [() => ({ redirect: "/" })],
+          },
+        ],
+      }),
+    );
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+    expect(screen.getByTestId("home")).toBeDefined();
+    expect(loader).not.toHaveBeenCalled();
+  });
+});
+
 describe("useRouter — query and hash", () => {
   it("returns the parsed query object", async () => {
     window.history.replaceState({}, "", "/users?tab=settings");

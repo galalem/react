@@ -1,11 +1,13 @@
 export type {
   AuthConfig,
+  ComponentType,
   CreateRouterOptions,
   ErrorComponentMap,
   Guard,
   GuardResult,
   HttpError,
   LayoutComponent,
+  LazyLoader,
   MatchResult,
   MetaConfig,
   MetaMap,
@@ -22,5 +24,5 @@ export type {
 export { matchPath } from "./matcher";
 export { createRouter } from "./router";
 export { Link, NavLink, RouterProvider, useRouter } from "./react";
-export { auth, guards, layout, prefix, roles } from "./shortcuts";
+export { auth, guards, lazy, layout, prefix, roles } from "./shortcuts";
 export { and, or } from "./roleExpression";
