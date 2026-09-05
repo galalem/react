@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType as ReactComponentType, ReactNode } from "react";
 
 export type RouteParams = Record<string, string>;
 
@@ -55,31 +55,36 @@ export type GuardResult =
 
 export type Guard = (ctx: RouteContext) => Promise<GuardResult> | GuardResult;
 
-export type LayoutComponent = ComponentType<{ children: ReactNode }>;
-
 /**
- * Loader for a code-split route. Return the component directly, or a module
- * whose `default` export is the component — so `() => import("./page")` works
- * with a default-exported component, and `() => import("./page").then(m =>
- * m.Page)` works with a named export.
+ * Deferred loader for a code-split component. Return the component directly,
+ * or a module whose `default` export is the component — so
+ * `{ lazy: () => import("./page") }` works with a default-exported component,
+ * and `{ lazy: () => import("./page").then((m) => m.Page) }` works with a
+ * named export.
+ *
+ * The `{ lazy }` object shape is the runtime discriminator between a lazy
+ * loader and a bare component: a plain function is a component, an object
+ * with a `lazy` key is a loader.
  *
  * The loader fires on demand, only after every guard on the route has
- * resolved, so a route rejected by `auth` or `roles` never fetches its chunk.
+ * resolved — so a route rejected by `auth` or `roles` never fetches its chunk.
  */
-export type LazyLoader = () => Promise<ComponentType | { default: ComponentType }>;
+export type LazyLoader<T = {}> = {
+  lazy: () => Promise<ReactComponentType<T> | { default: ReactComponentType<T> }>;
+};
+
+/**
+ * A component or a lazy loader for one. Accepted anywhere the router takes a
+ * component — routes and layouts — so either can be code-split without a
+ * dedicated `lazyLayout` field: wrap the loader in a `{ lazy }` object.
+ */
+export type ComponentType<T = {}> = ReactComponentType<T> | LazyLoader<T>;
+
+export type LayoutComponent = ComponentType<{ children: ReactNode }>;
 
 export type Route = {
   path: string;
-  /**
-   * The component to render for this route. Exactly one of `component` or
-   * `lazy` must be set.
-   */
-  component?: ComponentType;
-  /**
-   * Loader for a code-split component. Exactly one of `component` or `lazy`
-   * must be set. See `LazyLoader` for the accepted shapes.
-   */
-  lazy?: LazyLoader;
+  component: ComponentType;
   layout?: LayoutComponent;
   auth?: boolean;
   roles?: string[];
@@ -110,7 +115,7 @@ export type AuthConfig = {
   redirectParam?: string | false;
 };
 
-export type ErrorComponentMap = Partial<Record<HttpError, ComponentType>>;
+export type ErrorComponentMap = Partial<Record<HttpError, ReactComponentType>>;
 
 export type CreateRouterOptions = {
   routes: RouteEntry[];
@@ -133,8 +138,8 @@ export type RouterState = {
   search: string;
   query: Record<string, string>;
   hash: string;
-  component: ComponentType | null;
-  layouts: LayoutComponent[];
+  component: ReactComponentType | null;
+  layouts: ReactComponentType<{ children: ReactNode }>[];
   meta: MetaMap;
   data: unknown;
   error: HttpError | null;
@@ -180,11 +185,13 @@ export type Router = {
 export type MatchResult = { params: RouteParams } | null;
 
 // Internal: a route after group flattening — carries inherited config
-// and the ordered stack of layouts to apply.
+// and the ordered stack of layouts to apply. Both component and layouts are
+// already resolved to a plain React ComponentType at this point; any lazy
+// loaders have been wrapped in `React.lazy` upstream.
 export type FlatRoute = {
   path: string;
-  component: ComponentType;
-  layouts: LayoutComponent[];
+  component: ReactComponentType;
+  layouts: ReactComponentType<{ children: ReactNode }>[];
   guards: Guard[];
   auth: boolean;
   roles: string[];

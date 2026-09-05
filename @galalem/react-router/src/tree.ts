@@ -1,17 +1,19 @@
-import { lazy, type ComponentType } from "react";
+import { lazy, type ComponentType as ReactComponentType, type ReactNode } from "react";
 import type {
+  ComponentType,
   FlatRoute,
   Guard,
-  LayoutComponent,
   LazyLoader,
   Route,
   RouteEntry,
   RouteGroup,
 } from "./types";
 
+type ResolvedLayout = ReactComponentType<{ children: ReactNode }>;
+
 type InheritedContext = {
   prefix: string;
-  layouts: LayoutComponent[];
+  layouts: ResolvedLayout[];
   guards: Guard[];
   auth: boolean;
   roles: string[];
@@ -27,6 +29,21 @@ const EMPTY_CONTEXT: InheritedContext = {
 
 function isRouteGroup(entry: RouteEntry): entry is RouteGroup {
   return "children" in entry;
+}
+
+function isLazyLoader<T>(value: ComponentType<T>): value is LazyLoader<T> {
+  return typeof value === "object" && value !== null && "lazy" in value;
+}
+
+function resolveComponent<T>(source: ComponentType<T>): ReactComponentType<T> {
+  if (!isLazyLoader(source)) return source;
+  return lazy(async () => {
+    const resolved = await source.lazy();
+    if (resolved && typeof resolved === "object" && "default" in resolved) {
+      return resolved as { default: ReactComponentType<T> };
+    }
+    return { default: resolved as ReactComponentType<T> };
+  });
 }
 
 function joinPath(parent: string, child: string): string {
@@ -60,44 +77,22 @@ function extendContext(
 ): InheritedContext {
   return {
     prefix: joinPath(context.prefix, group.prefix ?? ""),
-    layouts: group.layout ? [...context.layouts, group.layout] : context.layouts,
+    layouts: group.layout
+      ? [...context.layouts, resolveComponent(group.layout)]
+      : context.layouts,
     guards: group.guards ? [...context.guards, ...group.guards] : context.guards,
     auth: context.auth || (group.auth ?? false),
     roles: mergeRoles(context.roles, group.roles ?? []),
   };
 }
 
-function toLazyComponent(loader: LazyLoader): ComponentType {
-  return lazy(async () => {
-    const resolved = await loader();
-    if (resolved && typeof resolved === "object" && "default" in resolved) {
-      return resolved as { default: ComponentType };
-    }
-    return { default: resolved as ComponentType };
-  });
-}
-
-function resolveRouteComponent(route: Route): ComponentType {
-  const hasComponent = route.component !== undefined;
-  const hasLazy = route.lazy !== undefined;
-  if (hasComponent && hasLazy) {
-    throw new Error(
-      `Route "${route.path}" has both "component" and "lazy" — set exactly one.`,
-    );
-  }
-  if (!hasComponent && !hasLazy) {
-    throw new Error(
-      `Route "${route.path}" has neither "component" nor "lazy" — set exactly one.`,
-    );
-  }
-  return hasLazy ? toLazyComponent(route.lazy!) : route.component!;
-}
-
 function flattenRoute(route: Route, context: InheritedContext): FlatRoute {
   return {
     path: joinPath(context.prefix, route.path),
-    component: resolveRouteComponent(route),
-    layouts: route.layout ? [...context.layouts, route.layout] : context.layouts,
+    component: resolveComponent(route.component),
+    layouts: route.layout
+      ? [...context.layouts, resolveComponent(route.layout)]
+      : context.layouts,
     guards: route.guards ? [...context.guards, ...route.guards] : context.guards,
     auth: context.auth || (route.auth ?? false),
     roles: mergeRoles(context.roles, route.roles ?? []),

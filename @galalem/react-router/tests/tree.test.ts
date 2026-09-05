@@ -281,30 +281,40 @@ describe("flattenRoutes", () => {
     });
   });
 
-  describe("lazy component validation", () => {
-    it("produces a component from a lazy loader without invoking it", () => {
+  describe("lazy components", () => {
+    it("wraps a `{ lazy }` component into a React.lazy without invoking the loader", () => {
       const loader = vi.fn(async () => ({ default: Home }));
-      const result = flattenRoutes([{ path: "/admin", lazy: loader }]);
+      const result = flattenRoutes([
+        { path: "/admin", component: { lazy: loader } },
+      ]);
 
       expect(result).toHaveLength(1);
+      // React.lazy returns a special lazy exotic component (an object with a
+      // `$$typeof` symbol, not a plain function).
       expect(typeof result[0].component).toBe("object");
       expect(loader).not.toHaveBeenCalled();
     });
 
-    it("throws when neither component nor lazy is set", () => {
-      expect(() =>
-        flattenRoutes([{ path: "/broken" } as unknown as Parameters<
-          typeof flattenRoutes
-        >[0][number]]),
-      ).toThrow(/neither "component" nor "lazy"/);
+    it("wraps a `{ lazy }` layout at group-flatten time without invoking the loader", () => {
+      const LazyShell: ComponentType<{ children: ReactNode }> = ({ children }) =>
+        children as ReactNode as null;
+      const loader = vi.fn(async () => ({ default: LazyShell }));
+      const result = flattenRoutes([
+        {
+          layout: { lazy: loader },
+          children: [{ path: "/x", component: Home }],
+        },
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].layouts).toHaveLength(1);
+      expect(typeof result[0].layouts[0]).toBe("object");
+      expect(loader).not.toHaveBeenCalled();
     });
 
-    it("throws when both component and lazy are set", () => {
-      expect(() =>
-        flattenRoutes([
-          { path: "/both", component: Home, lazy: async () => Home },
-        ]),
-      ).toThrow(/both "component" and "lazy"/);
+    it("leaves a bare component untouched", () => {
+      const result = flattenRoutes([{ path: "/", component: Home }]);
+      expect(result[0].component).toBe(Home);
     });
   });
 });

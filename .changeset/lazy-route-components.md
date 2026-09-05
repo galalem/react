@@ -2,7 +2,7 @@
 "@galalem/react-router": minor
 ---
 
-First-class support for code-split (lazy) route components. Set `lazy` on a route in place of `component` and the router splits the chunk, only fetching it after every guard on the route has resolved — so a route rejected by `auth` or `roles` never downloads its code. The loader accepts either a module with a `default` export or the component itself.
+First-class support for code-split (lazy) components. Anywhere the router takes a component — `Route.component` and `layout` on either a `Route` or a `RouteGroup` — you can now pass a `{ lazy }` loader instead of the component itself, and the router splits the chunk. The loader only fires after every guard on the route has resolved, so a route rejected by `auth` or `roles` never fetches its code. Layouts share the same shape, so there's no separate `lazyLayout` field.
 
 ```ts
 createRouter({
@@ -10,11 +10,15 @@ createRouter({
   routes: [
     auth([
       roles(["admin"], [
-        { path: "/admin", lazy: () => import("./pages/admin/page") },
+        {
+          path: "/admin",
+          component: { lazy: () => import("./pages/admin/page") },
+          layout: { lazy: () => import("./layouts/admin-shell") },
+        },
       ]),
     ]),
   ],
 });
 ```
 
-A single `suspenseFallback` on `createRouter` wraps every matched page in `<Suspense>` — inside the layouts, so the app shell stays mounted while the page falls back. `component` still accepts any `ComponentType`, `React.lazy` included; the same router-level `<Suspense>` covers it.
+The loader accepts either a module with a `default` export or the component itself. A single `suspenseFallback` on `createRouter` wraps every matched page in `<Suspense>` — inside the layouts, so the app shell stays mounted while the page falls back. That same boundary covers a `React.lazy` passed directly to `component`.

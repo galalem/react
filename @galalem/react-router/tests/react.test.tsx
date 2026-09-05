@@ -707,7 +707,7 @@ describe("RouterProvider — lazy routes", () => {
     const router = trackRouter(
       createRouter({
         suspenseFallback: <div data-testid="spinner">loading</div>,
-        routes: [{ path: "/", lazy: loader }],
+        routes: [{ path: "/", component: { lazy: loader } }],
       }),
     );
     await act(async () => {
@@ -723,7 +723,7 @@ describe("RouterProvider — lazy routes", () => {
     expect(screen.getByTestId("dashboard")).toBeDefined();
   });
 
-  it("keeps the layout mounted while the chunk loads", async () => {
+  it("keeps the layout mounted while the page's chunk loads", async () => {
     let resolveLoader!: (value: { default: typeof Dashboard }) => void;
     const loader = () =>
       new Promise<{ default: typeof Dashboard }>((resolve) => {
@@ -735,7 +735,7 @@ describe("RouterProvider — lazy routes", () => {
         routes: [
           {
             layout: AppShell,
-            children: [{ path: "/", lazy: loader }],
+            children: [{ path: "/", component: { lazy: loader } }],
           },
         ],
       }),
@@ -759,13 +759,36 @@ describe("RouterProvider — lazy routes", () => {
   it("accepts a loader that returns the component directly (no default wrapper)", async () => {
     const router = trackRouter(
       createRouter({
-        routes: [{ path: "/", lazy: async () => Home }],
+        routes: [{ path: "/", component: { lazy: async () => Home } }],
       }),
     );
     await act(async () => {
       render(<RouterProvider router={router} />);
     });
     expect(screen.getByTestId("home")).toBeDefined();
+  });
+
+  it("supports a lazy layout — the same `{ lazy }` shape works on `layout`", async () => {
+    const LazyShell = ({ children }: { children: ReactNode }) => (
+      <div data-testid="lazy-shell">lazy-shell:{children}</div>
+    );
+    const router = trackRouter(
+      createRouter({
+        suspenseFallback: <div data-testid="spinner">loading</div>,
+        routes: [
+          {
+            layout: { lazy: async () => LazyShell },
+            children: [{ path: "/", component: Home }],
+          },
+        ],
+      }),
+    );
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+    expect(
+      screen.getByTestId("lazy-shell").contains(screen.getByTestId("home")),
+    ).toBe(true);
   });
 
   it("does not invoke the loader when a guard rejects the route", async () => {
@@ -777,7 +800,7 @@ describe("RouterProvider — lazy routes", () => {
           { path: "/", component: Home },
           {
             path: "/admin",
-            lazy: loader,
+            component: { lazy: loader },
             guards: [() => ({ deny: true })],
           },
         ],
@@ -799,7 +822,7 @@ describe("RouterProvider — lazy routes", () => {
           { path: "/", component: Home },
           {
             path: "/admin",
-            lazy: loader,
+            component: { lazy: loader },
             guards: [() => ({ redirect: "/" })],
           },
         ],

@@ -101,25 +101,33 @@ function Nav() {
 ```ts
 type Route = {
   path: string;
-  component?: ComponentType;
-  lazy?: () => Promise<ComponentType | { default: ComponentType }>;
+  component: ComponentType; // a component, or `{ lazy: () => import(...) }`
   auth?: boolean;
   roles?: string[];
   guards?: Guard[];
 };
 ```
 
-Exactly one of `component` or `lazy` must be set.
-
-**Lazy routes are first-class.** Pass a `lazy` loader and the router code-splits the page, only fetching the chunk after every guard on the route has resolved — an `/admin` page that lives behind `roles(["admin"])` never ships to guests or normal users:
+**Lazy routes are first-class.** Anywhere `component` (or `layout`) is accepted, you can pass a `{ lazy }` loader instead of the component itself, and the router code-splits it. The loader only fires after every guard on the route has resolved — an `/admin` page behind `roles(["admin"])` never ships to guests or normal users:
 
 ```tsx
 routes: [
-  { path: "/admin", lazy: () => import("./AdminPage"), auth: true, roles: ["admin"] },
+  {
+    path: "/admin",
+    component: { lazy: () => import("./AdminPage") },
+    auth: true,
+    roles: ["admin"],
+  },
 ];
 ```
 
-The loader accepts either shape — a module with a `default` export (as above), or the component itself (`() => import("./AdminPage").then((m) => m.AdminPage)`).
+The loader accepts either shape — a module with a `default` export (as above), or the component itself (`{ lazy: () => import("./AdminPage").then((m) => m.AdminPage) }`).
+
+The same `{ lazy }` shape works on `layout`, so entire shells can be code-split without a separate field:
+
+```tsx
+{ layout: { lazy: () => import("./AdminShell") }, children: [ /* ... */ ] }
+```
 
 Configure a single loading fallback in `createRouter`; the router wraps every matched page in `<Suspense>` for you, inside the layouts so the app shell stays put while the page falls back:
 
@@ -130,7 +138,7 @@ createRouter({
 });
 ```
 
-`component` still accepts any `ComponentType`, including `React.lazy` if you'd rather manage the loader yourself — the router-level `<Suspense>` covers it too.
+The same router-level `<Suspense>` covers a `React.lazy` component passed directly to `component`, so you don't need per-page boundaries either.
 
 ### Route groups
 
