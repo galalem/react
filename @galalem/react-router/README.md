@@ -129,6 +129,14 @@ The same `{ lazy }` shape works on `layout`, so entire shells can be code-split 
 { layout: { lazy: () => import("./AdminShell") }, children: [ /* ... */ ] }
 ```
 
+A `lazy()` helper is also exported as a shorthand for the `{ lazy: … }` object:
+
+```tsx
+import { lazy } from "@galalem/react-router";
+
+{ path: "/admin", component: lazy(() => import("./AdminPage")) }
+```
+
 Configure a single loading fallback in `createRouter`; the router wraps every matched page in `<Suspense>` for you, inside the layouts so the app shell stays put while the page falls back:
 
 ```tsx

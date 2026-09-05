@@ -21,4 +21,4 @@ createRouter({
 });
 ```
 
-The loader accepts either a module with a `default` export or the component itself. A single `suspenseFallback` on `createRouter` wraps every matched page in `<Suspense>` — inside the layouts, so the app shell stays mounted while the page falls back. That same boundary covers a `React.lazy` passed directly to `component`.
+The loader accepts either a module with a `default` export or the component itself. A `lazy()` helper is exported as a shorthand for the object form (`component: lazy(() => import("./page"))`). A single `suspenseFallback` on `createRouter` wraps every matched page in `<Suspense>` — inside the layouts, so the app shell stays mounted while the page falls back. That same boundary covers a `React.lazy` passed directly to `component`.
