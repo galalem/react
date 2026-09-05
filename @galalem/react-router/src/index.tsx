@@ -6,6 +6,7 @@ export type {
   GuardResult,
   HttpError,
   LayoutComponent,
+  LazyLoader,
   MatchResult,
   MetaConfig,
   MetaMap,

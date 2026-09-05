@@ -57,9 +57,29 @@ export type Guard = (ctx: RouteContext) => Promise<GuardResult> | GuardResult;
 
 export type LayoutComponent = ComponentType<{ children: ReactNode }>;
 
+/**
+ * Loader for a code-split route. Return the component directly, or a module
+ * whose `default` export is the component — so `() => import("./page")` works
+ * with a default-exported component, and `() => import("./page").then(m =>
+ * m.Page)` works with a named export.
+ *
+ * The loader fires on demand, only after every guard on the route has
+ * resolved, so a route rejected by `auth` or `roles` never fetches its chunk.
+ */
+export type LazyLoader = () => Promise<ComponentType | { default: ComponentType }>;
+
 export type Route = {
   path: string;
-  component: ComponentType;
+  /**
+   * The component to render for this route. Exactly one of `component` or
+   * `lazy` must be set.
+   */
+  component?: ComponentType;
+  /**
+   * Loader for a code-split component. Exactly one of `component` or `lazy`
+   * must be set. See `LazyLoader` for the accepted shapes.
+   */
+  lazy?: LazyLoader;
   layout?: LayoutComponent;
   auth?: boolean;
   roles?: string[];
@@ -96,6 +116,15 @@ export type CreateRouterOptions = {
   routes: RouteEntry[];
   auth?: AuthConfig;
   errors?: ErrorComponentMap;
+  /**
+   * Fallback rendered while a lazy route's chunk is loading. Defaults to
+   * `null` (no fallback). The Suspense boundary sits inside the route's
+   * layouts, so the app shell stays mounted while the page falls back.
+   * Applies to every matched route, so any `React.lazy` component reached
+   * through `component` is also covered — you don't need to add your own
+   * `<Suspense>`.
+   */
+  suspenseFallback?: ReactNode;
 };
 
 export type RouterState = {
@@ -134,6 +163,11 @@ export type Router = {
   getState: () => RouterState;
   subscribe: (listener: RouterStateListener) => () => void;
   errors: ErrorComponentMap;
+  /**
+   * Fallback rendered while a lazy route's chunk is loading. Configured via
+   * `createRouter({ suspenseFallback })`. `null` when unset.
+   */
+  suspenseFallback: ReactNode;
   destroy: () => void;
   /**
    * Resolves once the initial navigation has settled — a component has matched,

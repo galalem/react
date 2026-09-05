@@ -245,6 +245,7 @@ export function createRouter(options: CreateRouterOptions): Router {
       };
     },
     errors: options.errors ?? {},
+    suspenseFallback: options.suspenseFallback ?? null,
     destroy: () => {
       historyUnsubscribe();
       history.destroy();

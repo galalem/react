@@ -1,7 +1,9 @@
+import { lazy, type ComponentType } from "react";
 import type {
   FlatRoute,
   Guard,
   LayoutComponent,
+  LazyLoader,
   Route,
   RouteEntry,
   RouteGroup,
@@ -65,10 +67,36 @@ function extendContext(
   };
 }
 
+function toLazyComponent(loader: LazyLoader): ComponentType {
+  return lazy(async () => {
+    const resolved = await loader();
+    if (resolved && typeof resolved === "object" && "default" in resolved) {
+      return resolved as { default: ComponentType };
+    }
+    return { default: resolved as ComponentType };
+  });
+}
+
+function resolveRouteComponent(route: Route): ComponentType {
+  const hasComponent = route.component !== undefined;
+  const hasLazy = route.lazy !== undefined;
+  if (hasComponent && hasLazy) {
+    throw new Error(
+      `Route "${route.path}" has both "component" and "lazy" — set exactly one.`,
+    );
+  }
+  if (!hasComponent && !hasLazy) {
+    throw new Error(
+      `Route "${route.path}" has neither "component" nor "lazy" — set exactly one.`,
+    );
+  }
+  return hasLazy ? toLazyComponent(route.lazy!) : route.component!;
+}
+
 function flattenRoute(route: Route, context: InheritedContext): FlatRoute {
   return {
     path: joinPath(context.prefix, route.path),
-    component: route.component,
+    component: resolveRouteComponent(route),
     layouts: route.layout ? [...context.layouts, route.layout] : context.layouts,
     guards: route.guards ? [...context.guards, ...route.guards] : context.guards,
     auth: context.auth || (route.auth ?? false),

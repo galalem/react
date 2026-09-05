@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ComponentType, ReactNode } from "react";
 import type { Guard, LayoutComponent } from "../src/types";
 import { flattenRoutes } from "../src/tree";
@@ -278,6 +278,33 @@ describe("flattenRoutes", () => {
 
       expect(result[0]).toMatchObject({ path: "/", auth: false });
       expect(result[1]).toMatchObject({ path: "/admin/users", auth: true });
+    });
+  });
+
+  describe("lazy component validation", () => {
+    it("produces a component from a lazy loader without invoking it", () => {
+      const loader = vi.fn(async () => ({ default: Home }));
+      const result = flattenRoutes([{ path: "/admin", lazy: loader }]);
+
+      expect(result).toHaveLength(1);
+      expect(typeof result[0].component).toBe("object");
+      expect(loader).not.toHaveBeenCalled();
+    });
+
+    it("throws when neither component nor lazy is set", () => {
+      expect(() =>
+        flattenRoutes([{ path: "/broken" } as unknown as Parameters<
+          typeof flattenRoutes
+        >[0][number]]),
+      ).toThrow(/neither "component" nor "lazy"/);
+    });
+
+    it("throws when both component and lazy are set", () => {
+      expect(() =>
+        flattenRoutes([
+          { path: "/both", component: Home, lazy: async () => Home },
+        ]),
+      ).toThrow(/both "component" and "lazy"/);
     });
   });
 });

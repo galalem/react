@@ -101,22 +101,36 @@ function Nav() {
 ```ts
 type Route = {
   path: string;
-  component: ComponentType;
+  component?: ComponentType;
+  lazy?: () => Promise<ComponentType | { default: ComponentType }>;
   auth?: boolean;
   roles?: string[];
   guards?: Guard[];
 };
 ```
 
-**Lazy loading is free** — `component` accepts any `ComponentType`, including `React.lazy`. Your bundler code-splits the chunk and any CSS that chunk imports:
+Exactly one of `component` or `lazy` must be set.
+
+**Lazy routes are first-class.** Pass a `lazy` loader and the router code-splits the page, only fetching the chunk after every guard on the route has resolved — an `/admin` page that lives behind `roles(["admin"])` never ships to guests or normal users:
 
 ```tsx
-const AdminPage = React.lazy(() => import("./AdminPage"));
-
-routes: [{ path: "/admin", component: AdminPage, auth: true, roles: ["admin"] }];
+routes: [
+  { path: "/admin", lazy: () => import("./AdminPage"), auth: true, roles: ["admin"] },
+];
 ```
 
-Wrap `<RouterProvider>` in a `<Suspense fallback={...}>` if you want a loading state during chunk fetches.
+The loader accepts either shape — a module with a `default` export (as above), or the component itself (`() => import("./AdminPage").then((m) => m.AdminPage)`).
+
+Configure a single loading fallback in `createRouter`; the router wraps every matched page in `<Suspense>` for you, inside the layouts so the app shell stays put while the page falls back:
+
+```tsx
+createRouter({
+  suspenseFallback: <Spinner />,
+  routes: [/* ... */],
+});
+```
+
+`component` still accepts any `ComponentType`, including `React.lazy` if you'd rather manage the loader yourself — the router-level `<Suspense>` covers it too.
 
 ### Route groups
 

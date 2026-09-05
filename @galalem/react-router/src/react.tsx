@@ -1,4 +1,5 @@
 import {
+  Suspense,
   createContext,
   createElement,
   useCallback,
@@ -71,9 +72,18 @@ function resolveErrorComponent(
   return () => createElement(GenericError, { code });
 }
 
-function renderWithLayouts(state: RouterState): ReactNode {
+function renderWithLayouts(
+  state: RouterState,
+  suspenseFallback: ReactNode,
+): ReactNode {
   if (state.component === null) return null;
-  let node: ReactNode = createElement(state.component);
+  // Suspense sits inside the layout stack so a lazy route's fallback replaces
+  // only the page content — the app shell stays mounted while the chunk loads.
+  let node: ReactNode = createElement(
+    Suspense,
+    { fallback: suspenseFallback },
+    createElement(state.component),
+  );
   for (let index = state.layouts.length - 1; index >= 0; index--) {
     const Layout = state.layouts[index];
     node = createElement(Layout, null, node);
@@ -101,8 +111,8 @@ export function RouterProvider({ router }: { router: Router }): ReactElement {
       const ErrorComponent = resolveErrorComponent(state.error, router.errors);
       return createElement(ErrorComponent);
     }
-    return renderWithLayouts(state);
-  }, [state, router.errors]);
+    return renderWithLayouts(state, router.suspenseFallback);
+  }, [state, router.errors, router.suspenseFallback]);
 
   return createElement(RouterContext.Provider, { value: router }, content);
 }
