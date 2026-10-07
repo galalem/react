@@ -663,6 +663,31 @@ describe("Link — data prop", () => {
   });
 });
 
+describe("useRouter — setData", () => {
+  it("re-renders consumers with the merged data", async () => {
+    const Page = () => {
+      const { data, setData } = useRouter();
+      useEffect(() => {
+        setData({ loaded: true });
+      }, [setData]);
+      return <span data-testid="data">{JSON.stringify(data)}</span>;
+    };
+    const router = trackRouter(
+      createRouter({
+        routes: [{ path: "/", component: Page, data: { panel: "main" } }],
+      }),
+    );
+
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+    expect(JSON.parse(screen.getByTestId("data").textContent!)).toEqual({
+      panel: "main",
+      loaded: true,
+    });
+  });
+});
+
 describe("RouterProvider — setMeta DOM sync", () => {
   const readMetaTags = () =>
     Array.from(document.head.querySelectorAll("meta[data-galalem-router]")).map(

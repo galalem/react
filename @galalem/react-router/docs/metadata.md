@@ -59,7 +59,7 @@ When you want to derive metadata from route params, query, or user, pass a funct
 }
 ```
 
-The function receives the full `RouteContext`: `path`, `search`, `hash`, `params`, `user`, `data`. It runs synchronously at match time. No promises. If you need async data — like fetching the user's actual name — use `router.setMeta` from the component instead.
+The function receives the full `RouteContext`: `path`, `search`, `hash`, `params`, `user`, `data`. It runs synchronously, after the route's [data functions](./url-state.md#computed-route-data) have resolved — so `ctx.data` includes anything they returned, which covers fetched values like the user's actual name. For metadata that depends on data the component fetches itself, use `router.setMeta`.
 
 ## Dynamic form: `router.setMeta`
 

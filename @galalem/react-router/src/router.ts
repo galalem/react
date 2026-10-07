@@ -11,6 +11,8 @@ import type {
   MetaMap,
   RouteContext,
   RouteData,
+  RouteDataConfig,
+  RouteDataResolver,
   RouteParams,
   Router,
   RouterState,
@@ -66,9 +68,24 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null;
 }
 
-// Static route data is the base; the navigation payload extends it, winning on
+// Merges data layers outermost-first, so a child's keys win over its group's.
+// A resolver that returns nothing contributes no keys.
+function mergeLayers(
+  layers: (RouteData | undefined)[],
+): RouteData | undefined {
+  let merged: RouteData | undefined;
+  for (const layer of layers) {
+    if (layer) merged = merged ? { ...merged, ...layer } : layer;
+  }
+  return merged;
+}
+
+const isResolver = (config: RouteDataConfig): config is RouteDataResolver =>
+  typeof config === "function";
+
+// Route data is the base; the navigation payload extends it, winning on
 // shared keys. A payload that isn't a plain object (string, array, class
-// instance) can't be merged, so it replaces the static data outright.
+// instance) can't be merged, so it replaces the route data outright.
 function resolveData(
   routeData: RouteData | undefined,
   navigationData: unknown,
@@ -163,7 +180,12 @@ export function createRouter(options: CreateRouterOptions): Router {
       return;
     }
 
-    const data = resolveData(match.route.data, navigationData);
+    const dataLayers = match.route.data;
+    // What's known before resolvers run: object-form layers plus the payload.
+    const preliminaryData = resolveData(
+      mergeLayers(dataLayers.map((layer) => (isResolver(layer) ? undefined : layer))),
+      navigationData,
+    );
     const guards = guardsByRoute.get(match.route)!;
     const user = options.auth ? (await options.auth.currentUser()) ?? null : null;
     if (generation !== navigationGeneration) return;
@@ -173,13 +195,41 @@ export function createRouter(options: CreateRouterOptions): Router {
       hash,
       params: match.params,
       user,
-      data,
+      data: preliminaryData,
     };
 
     const result = await runGuards(guards, context);
     if (generation !== navigationGeneration) return;
 
     if (result === true) {
+      let data = preliminaryData;
+      // Resolvers run only once every guard has passed, all in parallel.
+      if (dataLayers.some(isResolver)) {
+        try {
+          const resolvedLayers = await Promise.all(
+            dataLayers.map((layer) => (isResolver(layer) ? layer(context) : layer)),
+          );
+          if (generation !== navigationGeneration) return;
+          data = resolveData(mergeLayers(resolvedLayers), navigationData);
+        } catch (error) {
+          if (generation !== navigationGeneration) return;
+          console.error(error);
+          setState({
+            path,
+            params: match.params,
+            search,
+            query,
+            hash,
+            component: null,
+            layouts: [],
+            meta: {},
+            data: preliminaryData,
+            error: 500,
+          });
+          return;
+        }
+      }
+
       setState({
         path,
         params: match.params,
@@ -188,7 +238,7 @@ export function createRouter(options: CreateRouterOptions): Router {
         hash,
         component: match.route.component,
         layouts: match.route.layouts,
-        meta: resolveMeta(match.route.meta, context),
+        meta: resolveMeta(match.route.meta, { ...context, data }),
         data,
         error: null,
       });
@@ -210,7 +260,7 @@ export function createRouter(options: CreateRouterOptions): Router {
         component: null,
         layouts: [],
         meta: {},
-        data,
+        data: preliminaryData,
         error: 403,
       });
       return;
@@ -225,7 +275,7 @@ export function createRouter(options: CreateRouterOptions): Router {
       component: null,
       layouts: [],
       meta: {},
-      data,
+      data: preliminaryData,
       error: result.error,
     });
   };
@@ -251,6 +301,10 @@ export function createRouter(options: CreateRouterOptions): Router {
     },
     setMeta: (meta) => {
       setState({ ...state, meta: { ...state.meta, ...meta } });
+    },
+    setData: (data) => {
+      const current = isPlainObject(state.data) ? state.data : undefined;
+      setState({ ...state, data: resolveData(current, data) });
     },
     redirect: (fallback = "/") => {
       const candidate = redirectParameterName

@@ -376,18 +376,26 @@ router.push("/dashboard", { fromSidebar: true });
 const { data } = useRouter();
 ```
 
-Routes and groups can also declare static `data`. The navigation payload extends it — `{ ...routeData, ...payload }` — with group data cascading into children:
+Routes and groups can also declare `data` — an object, or a (sync or async) function of the route context. The navigation payload extends it — `{ ...routeData, ...payload }` — with group data cascading into children:
 
 ```ts
 { path: "/dashboard", component: Dashboard, data: { panel: "main", tab: 1 } }
 
 router.push("/dashboard", { tab: 3 });
 // useRouter().data === { panel: "main", tab: 3 }
+
+{
+  path: "/users/:id",
+  component: UserPage,
+  data: async ({ params }) => ({ user: await api.getUser(params.id) }),
+}
 ```
 
-Non-object payloads (strings, arrays) replace the static data instead of merging.
+Functions run only after every guard passes; the navigation waits for them (a throw renders the `500` component), and `meta` functions get the resolved data. The router doesn't fetch or cache — it calls your function. Non-object payloads (strings, arrays) replace the route data instead of merging.
 
-> **Prefer stateless routes.** `data` is an escape hatch for hints (e.g. "which panel opened this?"). Don't put real state in it — a user opening the URL directly, or refreshing, sees `undefined`.
+`router.setData(partial)` (also on `useRouter()`) shallow-merges into the current `data`; in-memory only, cleared on the next navigation.
+
+> **Prefer stateless routes.** The payload is an escape hatch for hints (e.g. "which panel opened this?"). Don't put real state in it — a user opening the URL directly, or refreshing, won't have it.
 
 ### Query strings and hash
 
@@ -444,9 +452,10 @@ You can migrate one section at a time.
 | `RouterProvider` | Mounts the router in your React tree |
 | `Link` | Anchor that navigates without a page reload |
 | `NavLink` | `Link` with `isActive` awareness, `activeClassName`, and `aria-current` |
-| `useRouter()` | Access `push`, `replace`, `back`, `redirect`, `setMeta`, `path`, `params`, `search`, `query`, `hash`, `data` |
+| `useRouter()` | Access `push`, `replace`, `back`, `redirect`, `setMeta`, `setData`, `path`, `params`, `search`, `query`, `hash`, `data` |
 | `router.redirect(fallback?)` | Reads `redirectUrl` from query, navigates there via replace (falls back to `fallback ?? "/"`) |
 | `router.setMeta(partial)` | Merges runtime metadata into the current route's meta; cleared on next navigation |
+| `router.setData(partial)` | Shallow-merges into the current route's `data`; cleared on next navigation |
 | `router.push(to, data?)` / `router.replace(to, data?)` | Optional payload attached to the navigation (`useRouter().data`, `RouteContext.data`) |
 | `router.ready` | Promise that resolves once the initial navigation (and any redirects) has settled |
 | `matchPath(pattern, path)` | Pure matcher, exported for tests and SSR |

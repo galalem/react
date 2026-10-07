@@ -14,6 +14,8 @@ export type {
   Route,
   RouteContext,
   RouteData,
+  RouteDataConfig,
+  RouteDataResolver,
   RouteEntry,
   RouteGroup,
   RouteParams,

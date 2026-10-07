@@ -319,32 +319,22 @@ describe("flattenRoutes", () => {
   });
 
   describe("data", () => {
-    it("is undefined when neither route nor groups declare it", () => {
+    it("is empty when neither route nor groups declare it", () => {
       const result = flattenRoutes([{ path: "/", component: Home }]);
-      expect(result[0].data).toBeUndefined();
+      expect(result[0].data).toEqual([]);
     });
 
-    it("keeps a route's own data", () => {
-      const result = flattenRoutes([
-        { path: "/", component: Home, data: { section: "home" } },
-      ]);
-      expect(result[0].data).toEqual({ section: "home" });
-    });
-
-    it("cascades group data into children, child keys winning", () => {
+    it("stacks group and route data outermost-first, objects and functions alike", () => {
+      const resolveArea = () => ({ area: "people" });
       const result = flattenRoutes([
         {
           prefix: "/admin",
-          data: { section: "admin", breadcrumb: "Admin" },
+          data: { section: "admin" },
           children: [
             {
-              data: { area: "people" },
+              data: resolveArea,
               children: [
-                {
-                  path: "/users",
-                  component: Users,
-                  data: { breadcrumb: "Users" },
-                },
+                { path: "/users", component: Users, data: { breadcrumb: "Users" } },
                 { path: "/settings", component: Settings },
               ],
             },
@@ -353,17 +343,13 @@ describe("flattenRoutes", () => {
         { path: "/", component: Home },
       ]);
 
-      expect(result[0].data).toEqual({
-        section: "admin",
-        area: "people",
-        breadcrumb: "Users",
-      });
-      expect(result[1].data).toEqual({
-        section: "admin",
-        area: "people",
-        breadcrumb: "Admin",
-      });
-      expect(result[2].data).toBeUndefined();
+      expect(result[0].data).toEqual([
+        { section: "admin" },
+        resolveArea,
+        { breadcrumb: "Users" },
+      ]);
+      expect(result[1].data).toEqual([{ section: "admin" }, resolveArea]);
+      expect(result[2].data).toEqual([]);
     });
   });
 });
