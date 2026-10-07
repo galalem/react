@@ -28,6 +28,7 @@ describe("flattenRoutes", () => {
           guards: [],
           auth: false,
           roles: [],
+          data: [],
         },
         {
           path: "/users",
@@ -36,6 +37,7 @@ describe("flattenRoutes", () => {
           guards: [],
           auth: false,
           roles: [],
+          data: [],
         },
       ]);
     });
@@ -60,6 +62,7 @@ describe("flattenRoutes", () => {
           guards: [isLoggedIn],
           auth: true,
           roles: ["viewer"],
+          data: [],
         },
       ]);
     });
@@ -254,6 +257,7 @@ describe("flattenRoutes", () => {
           guards: [],
           auth: true,
           roles: ["admin"],
+          data: [],
         },
         {
           path: "/admin/settings",
@@ -262,6 +266,7 @@ describe("flattenRoutes", () => {
           guards: [],
           auth: true,
           roles: ["admin"],
+          data: [],
         },
       ]);
     });
