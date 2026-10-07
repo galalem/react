@@ -6,6 +6,7 @@ import type {
   LazyLoader,
   Route,
   RouteEntry,
+  RouteData,
   RouteGroup,
 } from "./types";
 
@@ -17,6 +18,7 @@ type InheritedContext = {
   guards: Guard[];
   auth: boolean;
   roles: string[];
+  data: RouteData | undefined;
 };
 
 const EMPTY_CONTEXT: InheritedContext = {
@@ -25,6 +27,7 @@ const EMPTY_CONTEXT: InheritedContext = {
   guards: [],
   auth: false,
   roles: [],
+  data: undefined,
 };
 
 function isRouteGroup(entry: RouteEntry): entry is RouteGroup {
@@ -71,6 +74,15 @@ function mergeRoles(parent: string[], child: string[]): string[] {
   return [...parent, ...child];
 }
 
+function mergeData(
+  parent: RouteData | undefined,
+  child: RouteData | undefined,
+): RouteData | undefined {
+  if (!child) return parent;
+  if (!parent) return child;
+  return { ...parent, ...child };
+}
+
 function extendContext(
   context: InheritedContext,
   group: RouteGroup,
@@ -83,6 +95,7 @@ function extendContext(
     guards: group.guards ? [...context.guards, ...group.guards] : context.guards,
     auth: context.auth || (group.auth ?? false),
     roles: mergeRoles(context.roles, group.roles ?? []),
+    data: mergeData(context.data, group.data),
   };
 }
 
@@ -97,6 +110,7 @@ function flattenRoute(route: Route, context: InheritedContext): FlatRoute {
     auth: context.auth || (route.auth ?? false),
     roles: mergeRoles(context.roles, route.roles ?? []),
     meta: route.meta,
+    data: mergeData(context.data, route.data),
   };
 }
 

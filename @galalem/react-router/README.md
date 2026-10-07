@@ -364,7 +364,7 @@ function UserPage() {
 
 ### Attaching data to a navigation
 
-`router.push(to, data)` and `router.replace(to, data)` accept an optional payload that rides along under `window.history.state`. Available on `useRouter().data` and inside guards via `RouteContext.data`. Survives browser back/forward; `undefined` on URL-driven navigation (initial load, refresh, direct address bar entry).
+`router.push(to, data)` and `router.replace(to, data)` accept an optional payload that rides along under `window.history.state`. Available on `useRouter().data` and inside guards via `RouteContext.data`. Survives browser back/forward; absent on URL-driven navigation (initial load, refresh, direct address bar entry).
 
 ```tsx
 router.push("/dashboard", { fromSidebar: true });
@@ -375,6 +375,17 @@ router.push("/dashboard", { fromSidebar: true });
 // inside the destination:
 const { data } = useRouter();
 ```
+
+Routes and groups can also declare static `data`. The navigation payload extends it — `{ ...routeData, ...payload }` — with group data cascading into children:
+
+```ts
+{ path: "/dashboard", component: Dashboard, data: { panel: "main", tab: 1 } }
+
+router.push("/dashboard", { tab: 3 });
+// useRouter().data === { panel: "main", tab: 3 }
+```
+
+Non-object payloads (strings, arrays) replace the static data instead of merging.
 
 > **Prefer stateless routes.** `data` is an escape hatch for hints (e.g. "which panel opened this?"). Don't put real state in it — a user opening the URL directly, or refreshing, sees `undefined`.
 

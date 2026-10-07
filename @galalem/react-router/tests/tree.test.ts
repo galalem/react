@@ -317,4 +317,53 @@ describe("flattenRoutes", () => {
       expect(result[0].component).toBe(Home);
     });
   });
+
+  describe("data", () => {
+    it("is undefined when neither route nor groups declare it", () => {
+      const result = flattenRoutes([{ path: "/", component: Home }]);
+      expect(result[0].data).toBeUndefined();
+    });
+
+    it("keeps a route's own data", () => {
+      const result = flattenRoutes([
+        { path: "/", component: Home, data: { section: "home" } },
+      ]);
+      expect(result[0].data).toEqual({ section: "home" });
+    });
+
+    it("cascades group data into children, child keys winning", () => {
+      const result = flattenRoutes([
+        {
+          prefix: "/admin",
+          data: { section: "admin", breadcrumb: "Admin" },
+          children: [
+            {
+              data: { area: "people" },
+              children: [
+                {
+                  path: "/users",
+                  component: Users,
+                  data: { breadcrumb: "Users" },
+                },
+                { path: "/settings", component: Settings },
+              ],
+            },
+          ],
+        },
+        { path: "/", component: Home },
+      ]);
+
+      expect(result[0].data).toEqual({
+        section: "admin",
+        area: "people",
+        breadcrumb: "Users",
+      });
+      expect(result[1].data).toEqual({
+        section: "admin",
+        area: "people",
+        breadcrumb: "Admin",
+      });
+      expect(result[2].data).toBeUndefined();
+    });
+  });
 });

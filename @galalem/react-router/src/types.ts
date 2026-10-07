@@ -9,15 +9,24 @@ export type RouteContext = {
   params: RouteParams;
   user: unknown;
   /**
-   * Optional payload attached to this navigation via `router.push(to, data)`,
-   * `router.replace(to, data)`, or `<Link data={...} />`. `undefined` on
-   * URL-driven navigation (initial load, refresh, direct address bar entry).
-   * Prefer stateless routes; use this as an escape hatch only.
+   * The route's static `data` (declared on the route and its groups) merged
+   * with the payload attached to this navigation via `router.push(to, data)`,
+   * `router.replace(to, data)`, or `<Link data={...} />`. Keys from the
+   * navigation payload override static keys of the same name. Only the
+   * static part is present on URL-driven navigation (initial load, refresh,
+   * direct address bar entry); `undefined` when neither is set.
    */
   data: unknown;
 };
 
 export type MetaMap = Record<string, string>;
+
+/**
+ * Static data declared on a route or route group. Groups cascade into their
+ * children (child keys override parent keys), and a navigation payload passed
+ * to `push`, `replace`, or `<Link data>` is shallow-merged on top.
+ */
+export type RouteData = Record<string, unknown>;
 
 /**
  * Route metadata. Static object, or a function of the route context.
@@ -90,6 +99,7 @@ export type Route = {
   roles?: string[];
   guards?: Guard[];
   meta?: MetaConfig;
+  data?: RouteData;
 };
 
 export type RouteGroup = {
@@ -98,6 +108,7 @@ export type RouteGroup = {
   auth?: boolean;
   roles?: string[];
   guards?: Guard[];
+  data?: RouteData;
   children: RouteEntry[];
 };
 
@@ -196,4 +207,5 @@ export type FlatRoute = {
   auth: boolean;
   roles: string[];
   meta: MetaConfig | undefined;
+  data: RouteData | undefined;
 };

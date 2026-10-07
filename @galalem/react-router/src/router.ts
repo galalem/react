@@ -10,6 +10,7 @@ import type {
   MetaConfig,
   MetaMap,
   RouteContext,
+  RouteData,
   RouteParams,
   Router,
   RouterState,
@@ -57,6 +58,26 @@ function parseQuery(search: string): Record<string, string> {
   const parameters = new URLSearchParams(search);
   for (const [key, value] of parameters) query[key] = value;
   return query;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+// Static route data is the base; the navigation payload extends it, winning on
+// shared keys. A payload that isn't a plain object (string, array, class
+// instance) can't be merged, so it replaces the static data outright.
+function resolveData(
+  routeData: RouteData | undefined,
+  navigationData: unknown,
+): unknown {
+  if (navigationData === undefined) return routeData;
+  if (routeData === undefined || !isPlainObject(navigationData)) {
+    return navigationData;
+  }
+  return { ...routeData, ...navigationData };
 }
 
 const DEFAULT_REDIRECT_PARAM = "redirectUrl";
@@ -123,7 +144,7 @@ export function createRouter(options: CreateRouterOptions): Router {
     const search = history.currentSearch();
     const query = parseQuery(search);
     const hash = history.currentHash();
-    const data = history.currentData();
+    const navigationData = history.currentData();
     const match = findMatch(path);
 
     if (!match) {
@@ -136,12 +157,13 @@ export function createRouter(options: CreateRouterOptions): Router {
         component: null,
         layouts: [],
         meta: {},
-        data,
+        data: navigationData,
         error: 404,
       });
       return;
     }
 
+    const data = resolveData(match.route.data, navigationData);
     const guards = guardsByRoute.get(match.route)!;
     const user = options.auth ? (await options.auth.currentUser()) ?? null : null;
     if (generation !== navigationGeneration) return;

@@ -624,6 +624,43 @@ describe("Link — data prop", () => {
     fireEvent.click(screen.getByRole("link", { name: "go" }));
     expect(pushSpy).toHaveBeenCalledWith("/dashboard", { tab: 3 });
   });
+
+  it("extends the route's static data in useRouter().data", async () => {
+    const ShowData = () => {
+      const { data } = useRouter();
+      return <span data-testid="data">{JSON.stringify(data)}</span>;
+    };
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          {
+            path: "/",
+            component: () => (
+              <Link to="/details" data={{ tab: 3 }}>
+                go
+              </Link>
+            ),
+          },
+          {
+            path: "/details",
+            component: ShowData,
+            data: { tab: 1, panel: "main" },
+          },
+        ],
+      }),
+    );
+
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("link", { name: "go" }));
+    });
+    expect(JSON.parse(screen.getByTestId("data").textContent!)).toEqual({
+      tab: 3,
+      panel: "main",
+    });
+  });
 });
 
 describe("RouterProvider — setMeta DOM sync", () => {

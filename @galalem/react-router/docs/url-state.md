@@ -14,7 +14,7 @@ const {
   search,   // "?tab=roles"
   query,    // { tab: "roles" }
   hash,     // "#section"
-  data,     // whatever was passed to router.push(to, data)
+  data,     // the route's static `data`, extended by router.push(to, data)
 } = useRouter();
 ```
 
@@ -104,7 +104,27 @@ const { data } = useRouter();
 // data === { fromSidebar: true }
 ```
 
-Guards can read it too, via `RouteContext.data`. Under the hood, `data` is stored in `window.history.state` under a namespaced key (`__galalem_router_data`) so browser back/forward preserve it and other libraries writing to `history.state` don't collide.
+### Static route data
+
+Routes and groups can declare a `data` object too. Groups cascade into their children (child keys override parent keys), and the navigation payload is shallow-merged on top — so the payload *extends* the static data rather than replacing it:
+
+```ts
+{
+  prefix: "/app",
+  data: { section: "app", panel: "main" },
+  children: [{ path: "/dashboard", component: Dashboard, data: { tab: 1 } }],
+}
+
+// Direct visit / refresh:
+// data === { section: "app", panel: "main", tab: 1 }
+
+router.push("/app/dashboard", { panel: "sidebar", from: "nav" });
+// data === { section: "app", panel: "sidebar", tab: 1, from: "nav" }
+```
+
+Static data is always present, so it is safe to depend on — unlike the payload. The merge is shallow, and only plain-object payloads are merged: a string, array, or class instance passed to `push` replaces the static data outright. On a 404 there is no matched route, so `data` is just the payload.
+
+Guards can read it too, via `RouteContext.data` (the merged value). Under the hood, `data` is stored in `window.history.state` under a namespaced key (`__galalem_router_data`) so browser back/forward preserve it and other libraries writing to `history.state` don't collide.
 
 ### When to use it
 
@@ -125,7 +145,7 @@ Genuine use cases:
 
 If your page silently breaks in any of those cases, `data` is the wrong tool. Move that state into the URL (query params) or refetch it.
 
-Rule of thumb: **would the page work correctly if `data` were always `undefined`?** If yes, `data` is a nice-to-have hint. If no, redesign — the page depends on state that isn't reproducible.
+Rule of thumb: **would the page work correctly if the navigation payload were never passed?** If yes, `data` is a nice-to-have hint. If no, redesign — the page depends on state that isn't reproducible.
 
 ### Why not a global store?
 

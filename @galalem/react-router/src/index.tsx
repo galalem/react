@@ -13,6 +13,7 @@ export type {
   MetaMap,
   Route,
   RouteContext,
+  RouteData,
   RouteEntry,
   RouteGroup,
   RouteParams,
