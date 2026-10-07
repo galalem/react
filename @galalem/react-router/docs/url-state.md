@@ -14,7 +14,7 @@ const {
   search,   // "?tab=roles"
   query,    // { tab: "roles" }
   hash,     // "#section"
-  data,     // whatever was passed to router.push(to, data)
+  data,     // the route's static `data`, extended by router.push(to, data)
 } = useRouter();
 ```
 
@@ -104,7 +104,58 @@ const { data } = useRouter();
 // data === { fromSidebar: true }
 ```
 
-Guards can read it too, via `RouteContext.data`. Under the hood, `data` is stored in `window.history.state` under a namespaced key (`__galalem_router_data`) so browser back/forward preserve it and other libraries writing to `history.state` don't collide.
+### Route data
+
+Routes and groups can declare `data` too. Groups cascade into their children (child keys override parent keys), and the navigation payload is shallow-merged on top — so the payload *extends* the static data rather than replacing it:
+
+```ts
+{
+  prefix: "/app",
+  data: { section: "app", panel: "main" },
+  children: [{ path: "/dashboard", component: Dashboard, data: { tab: 1 } }],
+}
+
+// Direct visit / refresh:
+// data === { section: "app", panel: "main", tab: 1 }
+
+router.push("/app/dashboard", { panel: "sidebar", from: "nav" });
+// data === { section: "app", panel: "sidebar", tab: 1, from: "nav" }
+```
+
+Route data is always present, so it is safe to depend on — unlike the payload. The merge is shallow, and only plain-object payloads are merged: a string, array, or class instance passed to `push` replaces the route data outright. On a 404 there is no matched route, so `data` is just the payload.
+
+### Computed route data
+
+`data` can also be a function of the route context, sync or async. The router doesn't fetch anything itself and doesn't cache — it just calls your function and waits for it:
+
+```ts
+{
+  path: "/users/:id",
+  component: UserPage,
+  data: async ({ params }) => ({ user: await api.getUser(params.id) }),
+  meta: ({ data }) => ({ title: `${(data as { user: User }).user.name} | MyApp` }),
+}
+```
+
+- It runs **only after every guard passes**, so a rejected user never triggers it.
+- Group and route functions run in parallel; results merge outermost-first like object data, and the payload still goes on top.
+- The navigation settles when it resolves: the previous page stays mounted meanwhile, and `router.ready` waits for it. If a newer navigation starts first, the stale result is dropped.
+- If it throws or rejects, the route renders the `500` error component and the error is logged with `console.error`.
+- `meta` functions receive the resolved data.
+- It runs on every navigation to the route. Want caching or dedup? Call into your own cache (React Query, SWR, …) from the function.
+
+Guards — and the functions themselves — run before resolution, so their `RouteContext.data` holds what's known at that point: object-form data from the route and its groups, extended by the payload.
+
+### Updating data: `router.setData`
+
+`router.setData(partial)` (also on `useRouter()`) shallow-merges keys into the current `data` and re-renders consumers. Like `setMeta`, it's in-memory only — not written to `history.state` — and cleared on the next navigation.
+
+```tsx
+const { data, setData } = useRouter();
+setData({ tab: 2 });
+```
+
+Under the hood, the navigation payload is stored in `window.history.state` under a namespaced key (`__galalem_router_data`) so browser back/forward preserve it and other libraries writing to `history.state` don't collide.
 
 ### When to use it
 
@@ -116,16 +167,16 @@ Genuine use cases:
 
 ### When *not* to use it
 
-`data` is `undefined` when the user:
+The navigation payload is absent when the user:
 
 - Opens the URL directly in a new tab.
 - Refreshes the page.
 - Follows a link from an email or another site.
 - Uses the address bar.
 
-If your page silently breaks in any of those cases, `data` is the wrong tool. Move that state into the URL (query params) or refetch it.
+If your page silently breaks in any of those cases, the payload is the wrong tool. Move that state into the URL (query params), declare it as route data, or refetch it.
 
-Rule of thumb: **would the page work correctly if `data` were always `undefined`?** If yes, `data` is a nice-to-have hint. If no, redesign — the page depends on state that isn't reproducible.
+Rule of thumb: **would the page work correctly if the navigation payload were never passed?** If yes, `data` is a nice-to-have hint. If no, redesign — the page depends on state that isn't reproducible.
 
 ### Why not a global store?
 

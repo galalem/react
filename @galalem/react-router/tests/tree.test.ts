@@ -28,6 +28,7 @@ describe("flattenRoutes", () => {
           guards: [],
           auth: false,
           roles: [],
+          data: [],
         },
         {
           path: "/users",
@@ -36,6 +37,7 @@ describe("flattenRoutes", () => {
           guards: [],
           auth: false,
           roles: [],
+          data: [],
         },
       ]);
     });
@@ -60,6 +62,7 @@ describe("flattenRoutes", () => {
           guards: [isLoggedIn],
           auth: true,
           roles: ["viewer"],
+          data: [],
         },
       ]);
     });
@@ -254,6 +257,7 @@ describe("flattenRoutes", () => {
           guards: [],
           auth: true,
           roles: ["admin"],
+          data: [],
         },
         {
           path: "/admin/settings",
@@ -262,6 +266,7 @@ describe("flattenRoutes", () => {
           guards: [],
           auth: true,
           roles: ["admin"],
+          data: [],
         },
       ]);
     });
@@ -315,6 +320,41 @@ describe("flattenRoutes", () => {
     it("leaves a bare component untouched", () => {
       const result = flattenRoutes([{ path: "/", component: Home }]);
       expect(result[0].component).toBe(Home);
+    });
+  });
+
+  describe("data", () => {
+    it("is empty when neither route nor groups declare it", () => {
+      const result = flattenRoutes([{ path: "/", component: Home }]);
+      expect(result[0].data).toEqual([]);
+    });
+
+    it("stacks group and route data outermost-first, objects and functions alike", () => {
+      const resolveArea = () => ({ area: "people" });
+      const result = flattenRoutes([
+        {
+          prefix: "/admin",
+          data: { section: "admin" },
+          children: [
+            {
+              data: resolveArea,
+              children: [
+                { path: "/users", component: Users, data: { breadcrumb: "Users" } },
+                { path: "/settings", component: Settings },
+              ],
+            },
+          ],
+        },
+        { path: "/", component: Home },
+      ]);
+
+      expect(result[0].data).toEqual([
+        { section: "admin" },
+        resolveArea,
+        { breadcrumb: "Users" },
+      ]);
+      expect(result[1].data).toEqual([{ section: "admin" }, resolveArea]);
+      expect(result[2].data).toEqual([]);
     });
   });
 });

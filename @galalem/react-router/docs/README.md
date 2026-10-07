@@ -69,7 +69,7 @@ Sub-mount is the supported adoption path for v0.1. Sibling mode (both routers wr
 
 - **You need SSR today.** We're client-only in v0.1. Use Remix, Next, or TanStack Router.
 - **You want file-system routing.** Deferred to a future Vite plugin. Explicit route config is the only supported API right now.
-- **You need data loaders integrated with your router.** We deliberately don't touch data fetching. Bring your own (SWR, React Query, RSC — whatever). If you want data-driven `<meta>` tags, `router.setMeta` covers it.
+- **You need data loaders integrated with your router.** We deliberately don't touch data fetching. Bring your own (SWR, React Query, RSC — whatever). A route's `data` can be an async function, so you can call your fetcher there and the router waits for it — but it does no fetching, caching, or prefetching of its own. If you want data-driven `<meta>` tags, `meta` functions see resolved route data, and `router.setMeta` covers the rest.
 
 ## Non-goals for v0.1
 

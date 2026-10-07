@@ -150,7 +150,7 @@ const canAccessProject: Guard = async (ctx) => {
 };
 ```
 
-Guards receive the full `RouteContext`: `path`, `search`, `hash`, `params`, `user` (whatever `auth.currentUser()` returned), and `data` (any payload passed via `router.push(to, data)`).
+Guards receive the full `RouteContext`: `path`, `search`, `hash`, `params`, `user` (whatever `auth.currentUser()` returned), and `data` (the route's object-form `data` extended by any payload passed via `router.push(to, data)` — data functions run after guards, so their results aren't in it yet).
 
 ## Post-login return
 

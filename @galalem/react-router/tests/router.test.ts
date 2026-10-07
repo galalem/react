@@ -753,6 +753,393 @@ describe("createRouter — data (payload attached to navigations)", () => {
   });
 });
 
+describe("createRouter — static route data", () => {
+  it("exposes route data on URL-driven navigation", async () => {
+    window.history.replaceState(null, "", "/dashboard");
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/dashboard", component: Dashboard, data: { panel: "main" } },
+        ],
+      }),
+    );
+    await router.ready;
+    expect(router.getState().data).toEqual({ panel: "main" });
+  });
+
+  it("extends route data with the navigation payload, payload keys winning", async () => {
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/", component: Home },
+          {
+            prefix: "/app",
+            data: { section: "app", panel: "main" },
+            children: [
+              { path: "/dashboard", component: Dashboard, data: { tab: 1 } },
+            ],
+          },
+        ],
+      }),
+    );
+    await router.ready;
+
+    router.push("/app/dashboard", { panel: "sidebar", from: "nav" });
+    await flush();
+    expect(router.getState().data).toEqual({
+      section: "app",
+      panel: "sidebar",
+      tab: 1,
+      from: "nav",
+    });
+
+    router.replace("/app/dashboard");
+    await flush();
+    expect(router.getState().data).toEqual({
+      section: "app",
+      panel: "main",
+      tab: 1,
+    });
+  });
+
+  it("a non-object payload replaces route data outright", async () => {
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/", component: Home },
+          { path: "/dashboard", component: Dashboard, data: { panel: "main" } },
+        ],
+      }),
+    );
+    await router.ready;
+
+    router.push("/dashboard", "raw");
+    await flush();
+    expect(router.getState().data).toBe("raw");
+
+    router.push("/dashboard", ["a", "b"]);
+    await flush();
+    expect(router.getState().data).toEqual(["a", "b"]);
+  });
+
+  it("does not mutate the declared route data", async () => {
+    const declared = { panel: "main" };
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/", component: Home },
+          { path: "/dashboard", component: Dashboard, data: declared },
+        ],
+      }),
+    );
+    await router.ready;
+
+    router.push("/dashboard", { panel: "sidebar" });
+    await flush();
+    expect(declared).toEqual({ panel: "main" });
+  });
+
+  it("guards see the merged data", async () => {
+    let seenData: unknown = "not captured";
+    const captureGuard: Guard = (ctx) => {
+      seenData = ctx.data;
+      return true;
+    };
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/", component: Home },
+          {
+            path: "/dashboard",
+            component: Dashboard,
+            data: { requiresTour: true },
+            guards: [captureGuard],
+          },
+        ],
+      }),
+    );
+    await router.ready;
+
+    router.push("/dashboard", { origin: "welcome-banner" });
+    await flush();
+    expect(seenData).toEqual({ requiresTour: true, origin: "welcome-banner" });
+  });
+});
+
+describe("createRouter — data resolvers", () => {
+  it("resolves async route data and extends it with the payload", async () => {
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/", component: Home },
+          {
+            prefix: "/users",
+            data: { section: "users" },
+            children: [
+              {
+                path: "/:id",
+                component: UserDetail,
+                data: async ({ params }) => ({ user: { id: params.id }, tab: 1 }),
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    await router.ready;
+
+    router.push("/users/42", { tab: 3 });
+    await flush();
+    expect(router.getState().component).toBe(UserDetail);
+    expect(router.getState().data).toEqual({
+      section: "users",
+      user: { id: "42" },
+      tab: 3,
+    });
+  });
+
+  it("merges group and route resolvers outermost-first, child keys winning", async () => {
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          {
+            data: () => ({ who: "group", group: true }),
+            children: [
+              { path: "/", component: Home, data: async () => ({ who: "route" }) },
+            ],
+          },
+        ],
+      }),
+    );
+    await router.ready;
+    expect(router.getState().data).toEqual({ who: "route", group: true });
+  });
+
+  it("does not render until the resolver settles, and ready waits for it", async () => {
+    let release: (value: Record<string, unknown>) => void = () => {};
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          {
+            path: "/",
+            component: Home,
+            data: () => new Promise((resolve) => (release = resolve)),
+          },
+        ],
+      }),
+    );
+    await flush();
+    expect(router.getState().component).toBeNull();
+
+    release({ loaded: true });
+    await router.ready;
+    expect(router.getState().component).toBe(Home);
+    expect(router.getState().data).toEqual({ loaded: true });
+  });
+
+  it("never runs the resolver when a guard rejects", async () => {
+    const resolver = vi.fn(() => ({ secret: true }));
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/", component: Home },
+          {
+            path: "/admin",
+            component: Admin,
+            guards: [() => ({ deny: true })],
+            data: resolver,
+          },
+        ],
+      }),
+    );
+    await router.ready;
+
+    router.push("/admin");
+    await flush();
+    expect(router.getState().error).toBe(403);
+    expect(resolver).not.toHaveBeenCalled();
+  });
+
+  it("gives guards and resolvers the data known before resolving", async () => {
+    let guardData: unknown = "not captured";
+    let resolverData: unknown = "not captured";
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/", component: Home },
+          {
+            data: { section: "app" },
+            children: [
+              {
+                path: "/dashboard",
+                component: Dashboard,
+                guards: [
+                  (ctx) => {
+                    guardData = ctx.data;
+                    return true;
+                  },
+                ],
+                data: (ctx) => {
+                  resolverData = ctx.data;
+                  return { fetched: true };
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    await router.ready;
+
+    router.push("/dashboard", { from: "nav" });
+    await flush();
+    expect(guardData).toEqual({ section: "app", from: "nav" });
+    expect(resolverData).toEqual({ section: "app", from: "nav" });
+    expect(router.getState().data).toEqual({
+      section: "app",
+      fetched: true,
+      from: "nav",
+    });
+  });
+
+  it("passes the resolved data to the meta function", async () => {
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          {
+            path: "/",
+            component: Home,
+            data: async () => ({ name: "Jane" }),
+            meta: ({ data }) => ({ title: `${(data as { name: string }).name} | App` }),
+          },
+        ],
+      }),
+    );
+    await router.ready;
+    expect(router.getState().meta.title).toBe("Jane | App");
+  });
+
+  it("renders a 500 when the resolver throws", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failure = new Error("fetch failed");
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          {
+            path: "/",
+            component: Home,
+            data: async () => {
+              throw failure;
+            },
+          },
+        ],
+      }),
+    );
+    await router.ready;
+    expect(router.getState().error).toBe(500);
+    expect(router.getState().component).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(failure);
+    errorSpy.mockRestore();
+  });
+
+  it("drops a slow resolver's result when a newer navigation wins", async () => {
+    let release: (value: Record<string, unknown>) => void = () => {};
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/", component: Home },
+          {
+            path: "/slow",
+            component: Dashboard,
+            data: () => new Promise((resolve) => (release = resolve)),
+          },
+        ],
+      }),
+    );
+    await router.ready;
+
+    router.push("/slow");
+    await flush();
+    router.push("/");
+    await flush();
+    release({ stale: true });
+    await flush();
+    expect(router.getState().path).toBe("/");
+    expect(router.getState().data).toBeUndefined();
+  });
+});
+
+describe("createRouter — setData (imperative)", () => {
+  it("shallow-merges into the current data", async () => {
+    window.history.replaceState(null, "", "/dashboard");
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/", component: Home },
+          { path: "/dashboard", component: Dashboard, data: { panel: "main", tab: 1 } },
+        ],
+      }),
+    );
+    await router.ready;
+
+    router.setData({ tab: 2, extra: true });
+    expect(router.getState().data).toEqual({ panel: "main", tab: 2, extra: true });
+  });
+
+  it("notifies subscribers", async () => {
+    const router = trackRouter(
+      createRouter({ routes: [{ path: "/", component: Home }] }),
+    );
+    await router.ready;
+    const listener = vi.fn();
+    router.subscribe(listener);
+
+    router.setData({ x: 1 });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(router.getState().data).toEqual({ x: 1 });
+  });
+
+  it("replaces a non-object payload", async () => {
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/", component: Home },
+          { path: "/dashboard", component: Dashboard },
+        ],
+      }),
+    );
+    await router.ready;
+
+    router.push("/dashboard", "raw");
+    await flush();
+    router.setData({ x: 1 });
+    expect(router.getState().data).toEqual({ x: 1 });
+  });
+
+  it("does not mutate the declared route data and is cleared on navigation", async () => {
+    const declared = { panel: "main" };
+    window.history.replaceState(null, "", "/dashboard");
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/", component: Home },
+          { path: "/dashboard", component: Dashboard, data: declared },
+        ],
+      }),
+    );
+    await router.ready;
+
+    router.setData({ panel: "sidebar" });
+    expect(declared).toEqual({ panel: "main" });
+
+    router.push("/");
+    await flush();
+    router.push("/dashboard");
+    await flush();
+    expect(router.getState().data).toEqual({ panel: "main" });
+  });
+});
+
 describe("createRouter — redirect (post-login return)", () => {
   it("navigates to the URL from the default redirectUrl query param", async () => {
     window.history.replaceState({}, "", "/login?redirectUrl=%2Fdashboard");

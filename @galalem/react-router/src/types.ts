@@ -9,15 +9,41 @@ export type RouteContext = {
   params: RouteParams;
   user: unknown;
   /**
-   * Optional payload attached to this navigation via `router.push(to, data)`,
-   * `router.replace(to, data)`, or `<Link data={...} />`. `undefined` on
-   * URL-driven navigation (initial load, refresh, direct address bar entry).
-   * Prefer stateless routes; use this as an escape hatch only.
+   * The route's static `data` (declared on the route and its groups) merged
+   * with the payload attached to this navigation via `router.push(to, data)`,
+   * `router.replace(to, data)`, or `<Link data={...} />`. Keys from the
+   * navigation payload override static keys of the same name. Only the
+   * static part is present on URL-driven navigation (initial load, refresh,
+   * direct address bar entry); `undefined` when neither is set.
    */
   data: unknown;
 };
 
 export type MetaMap = Record<string, string>;
+
+export type RouteData = Record<string, unknown>;
+
+/**
+ * Computes a route's data at navigation time. Runs only after every guard on
+ * the route has passed, so a rejected user never triggers it. May be async —
+ * the navigation settles once it resolves. The router does no caching: the
+ * function runs on every navigation to the route.
+ *
+ * Receives the route context; its `data` holds what is known before
+ * resolvers run (object-form data from the route and its groups, extended by
+ * the navigation payload).
+ */
+export type RouteDataResolver = (
+  context: RouteContext,
+) => RouteData | Promise<RouteData>;
+
+/**
+ * Data declared on a route or route group: an object, or a function returning
+ * one (sync or async). Groups cascade into their children (child keys override
+ * parent keys), and a navigation payload passed to `push`, `replace`, or
+ * `<Link data>` is shallow-merged on top.
+ */
+export type RouteDataConfig = RouteData | RouteDataResolver;
 
 /**
  * Route metadata. Static object, or a function of the route context.
@@ -90,6 +116,7 @@ export type Route = {
   roles?: string[];
   guards?: Guard[];
   meta?: MetaConfig;
+  data?: RouteDataConfig;
 };
 
 export type RouteGroup = {
@@ -98,6 +125,7 @@ export type RouteGroup = {
   auth?: boolean;
   roles?: string[];
   guards?: Guard[];
+  data?: RouteDataConfig;
   children: RouteEntry[];
 };
 
@@ -159,6 +187,12 @@ export type Router = {
    */
   setMeta: (meta: MetaMap) => void;
   /**
+   * Shallow-merge extra keys into the current route's `data` (replacing it
+   * when the current value isn't a plain object). In-memory only — not written
+   * to `history.state`, and naturally cleared on the next navigation.
+   */
+  setData: (data: RouteData) => void;
+  /**
    * Reads the `redirectUrl` query param from the current URL (or the auth
    * config's `redirectParam`) and navigates there via `replace`. Falls back to
    * the supplied path when no param is present or when the encoded target
@@ -196,4 +230,6 @@ export type FlatRoute = {
   auth: boolean;
   roles: string[];
   meta: MetaConfig | undefined;
+  // Data configs from the outermost group down to the route itself.
+  data: RouteDataConfig[];
 };
