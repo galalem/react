@@ -10,6 +10,12 @@ import { useSyncExternalStore, type ReactElement } from "react";
  */
 export type Translations = Record<string, string | null>;
 
+/**
+ * Values substituted into `{placeholder}`s by {@link LocaleAPI.__} and `<T args>`.
+ * Placeholder names may only contain English letters, digits and `_`.
+ */
+export type TranslationArgs = Record<string, string | number>;
+
 /** A lazy loader for a locale, e.g. `() => import("./en.json")`. */
 export type LocaleLoader = () => Promise<{ default: Record<string, string | null> }>;
 
@@ -39,10 +45,13 @@ export interface InitSettings {
 export interface LocaleAPI {
   /**
    * Translate a string. Returns the mapped value if the key exists, otherwise
-   * returns the input unchanged.
+   * returns the input unchanged. When `args` is given, `{name}` placeholders in
+   * the result are replaced with `args.name`; placeholders without a matching
+   * arg are left as-is.
    * @example const { __ } = useLocale(); __("Save");
+   * @example __("Hello, {name}", { name: "Ada" });
    */
-  __: (key: string) => string;
+  __: (key: string, args?: TranslationArgs) => string;
   /** The currently selected locale, or `undefined` if none has been set yet. */
   locale: string | undefined;
   /**
@@ -70,19 +79,39 @@ export function setTranslations(next: Translations): void {
   translations = next;
 }
 
-function translate(key: string): string {
-  return translations[key] ?? key;
+/**
+ * `{name}` placeholder: braces around one or more English letters, digits or
+ * `_`. Anything else (spaces, hyphens, `{}`) is plain text — there's no escape
+ * syntax, so a literal `{ name }` simply never matches.
+ */
+const PLACEHOLDER = /\{([A-Za-z0-9_]+)\}/g;
+
+/**
+ * Single-pass substitution: values are inserted verbatim and never re-scanned,
+ * and only own keys of `args` count (so `{toString}` doesn't hit the prototype).
+ */
+function interpolate(text: string, args: TranslationArgs): string {
+  return text.replace(PLACEHOLDER, (match, name: string) =>
+    Object.hasOwn(args, name) ? String(args[name]) : match,
+  );
+}
+
+function translate(key: string, args?: TranslationArgs): string {
+  const text = translations[key] ?? key;
+  return args ? interpolate(text, args) : text;
 }
 
 /**
- * Component form of the translator: its (string) children get translated.
+ * Component form of the translator: its (string) children get translated, and
+ * `args` fills `{placeholder}`s like the second argument of `__`.
  * Auto-subscribes to locale changes via {@link useLocale}, so it re-renders
  * whenever `setLocale` swaps the active dictionary.
  * @example <T>hello world</T>
+ * @example <T args={{ name }}>{"Hello, {name}"}</T>
  */
-export function T({ children }: { children: string }): ReactElement {
+export function T({ children, args }: { children: string; args?: TranslationArgs }): ReactElement {
   const { __ } = useLocale();
-  return <>{__(children)}</>;
+  return <>{__(children, args)}</>;
 }
 
 /** Alias of {@link T}. */

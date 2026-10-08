@@ -69,6 +69,7 @@ Two ways to reach the same dictionary. Pick by context, not preference.
 | Plain text child in JSX | `<T>Save</T>` | One-liner, no destructuring, subscribes automatically. |
 | String inside a JSX attribute (`placeholder`, `aria-label`, `title`, etc.) | `useLocale().__(...)` | `<T>` returns JSX, not a string, so it can't go in an attribute. |
 | String built from concatenation or template literals | `useLocale().__(...)` | Same reason — you need a string value. |
+| Text with runtime values (`"Hello, {name}"`) | `<T args={{ name }}>{"Hello, {name}"}</T>` or `__("Hello, {name}", { name })` | Placeholders live in the key, so translators can reorder them. See [Interpolation](#interpolation-with-placeholders). |
 | Reading or switching the active locale | `useLocale().locale` / `useLocale().setLocale(...)` | Both live on the hook. |
 
 Concrete:
@@ -218,6 +219,38 @@ With the Vite plugin:
 
 Without the plugin: add a new entry to your `init({...})` call. The bundler
 picks it up on the next reload.
+
+### Interpolation with placeholders
+
+Write the placeholder into the key, and fill it at the call site:
+
+```jsonc
+// fr.json
+{ "Welcome back, {name}": "Bon retour, {name}" }
+```
+
+```tsx
+const { __ } = useLocale();
+__("Welcome back, {name}", { name: user.name });          // "Bon retour, Ada"
+<T args={{ name: user.name }}>{"Welcome back, {name}"}</T> // same, as JSX
+```
+
+How it works: `__` looks up the key first (falling back to the key itself as
+usual), then does one regex pass over the result with
+`/\{([A-Za-z0-9_]+)\}/g`. Consequences worth knowing:
+
+- Only letters, digits and `_` inside braces match. `{ name }` or
+  `{first-name}` are left as literal text — that's the "escape hatch", since
+  there's no backslash escaping.
+- A placeholder with no matching arg is left as-is, so a typo shows up in the
+  UI as `{nmae}` instead of vanishing.
+- Inserted values are never re-scanned, and only own properties of `args`
+  count (`{toString}` won't resolve to `Object.prototype.toString`).
+- In JSX, the key must be a string expression (`{"Hi {name}"}`); bare
+  `Hi {name}` children would evaluate `name` as JavaScript.
+
+No plurals, gender or nested elements — pick a heavier library if you need
+those (see the main README's "Scope & when to graduate").
 
 ### Detecting missing translations
 
