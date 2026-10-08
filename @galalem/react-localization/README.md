@@ -63,7 +63,7 @@ while `John` stays as-is because its value is `null` (see [Values](#values)).
 ## Translating
 
 `<T>` for plain JSX children, `useLocale().__` for anything that needs a string (attributes,
-interpolation, non-JSX contexts):
+template literals, non-JSX contexts):
 
 ```tsx
 import { T, Text, Translate, useLocale } from "@galalem/react-localization";
@@ -117,6 +117,46 @@ A translation entry is either a string or `null`:
 A key with no entry at all also falls back to the key itself, so `__("Save")` returns
 `"Save"` until you add a translation. Use `null` — never `""` — for deliberate
 non-translations; empty strings trigger a non-blocking `console.warn` when a locale loads.
+
+## Interpolation
+
+Put `{placeholder}`s in a key, then pass values as the second argument of `__` or the
+`args` prop of `<T>`:
+
+```jsonc
+// src/lang/es.json
+{ "Hello, {name}": "Hola, {name}", "{count} new messages": "{count} mensajes nuevos" }
+```
+
+```tsx
+import { T, useLocale } from "@galalem/react-localization";
+
+function Inbox({ name, count }: { name: string; count: number }) {
+  const { __ } = useLocale();
+  return (
+    <>
+      <h1><T args={{ name }}>{"Hello, {name}"}</T></h1>
+      <p title={__("{count} new messages", { count })}>…</p>
+    </>
+  );
+}
+```
+
+The key is the raw template, so translators can move placeholders wherever their language
+needs them. In `<T>`, wrap the key in `{"..."}` — bare `{name}` in JSX children is a JS
+expression, not text.
+
+Rules (deliberately minimal):
+
+- A placeholder is `{` + one or more English letters, digits or `_` + `}` — e.g. `{name}`,
+  `{first_name}`, `{0}`.
+- Anything else is plain text: `{ name }`, `{first-name}`, `{}` never match. There's no
+  escape syntax — if you need literal braces around a word, add a space inside them.
+- Values are `string | number`, inserted once — a value containing `{x}` isn't substituted
+  again.
+- A placeholder with no matching arg stays as-is (`"Hi {name}"`), so it's easy to spot.
+- Fallbacks still apply: a `null` value or a missing key returns the key, with its
+  placeholders filled in.
 
 ## Multiple locales
 
@@ -210,12 +250,11 @@ At build time these are rewritten into an explicit lazy-loader map. Notes:
 
 ## Scope & when to graduate
 
-This package is deliberately small: string keys → string values, one active locale per
-process. That covers static UI text in most apps and keeps the API to two names (`useLocale`, `<T>`).
+This package is deliberately small: string keys → string values (with simple `{placeholder}`
+interpolation), one active locale per process. That covers static UI text in most apps and keeps the API to two names (`useLocale`, `<T>`).
 
 Reach for a heavier library when you need:
 
-- **Interpolation** — `"Hello, {name}"` with runtime values.
 - **Plurals or gender** — ICU-style `"{count, plural, one {# item} other {# items}}"`.
 - **Rich text** — nested React elements inside a translated message.
 - **Per-request locale in multi-tenant SSR** — see the SSR note above.
@@ -229,7 +268,7 @@ or [Lingui](https://lingui.dev/). All three do the things this package deliberat
 | Export                | Signature                                              | Description                                             |
 | --------------------- | ------------------------------------------------------ | ------------------------------------------------------- |
 | `useLocale`           | `() => LocaleAPI`                                      | React hook: returns `{ __, locale, setLocale, getSupportedLocales }` and subscribes the calling component to locale changes. |
-| `T` / `Text` / `Translate` | `({ children }: { children: string }) => ReactElement` | Component form of `__`. Subscribes internally.     |
+| `T` / `Text` / `Translate` | `({ children, args }: { children: string; args?: TranslationArgs }) => ReactElement` | Component form of `__`. Subscribes internally.     |
 | `init`                | `(options?, settings?: InitSettings) => void`          | Register locales (+ optional `{ storageKey }`); folder sugar needs the Vite plugin. |
 | `detectLocale`        | `() => string \| undefined`                            | Best browser-language match among registered locales.   |
 | `load`                | `(locale: string) => Promise<Translations>`            | Resolve (and cache) a locale's translations.            |
@@ -239,11 +278,11 @@ or [Lingui](https://lingui.dev/). All three do the things this package deliberat
 
 | Field                 | Signature                                              | Description                                             |
 | --------------------- | ------------------------------------------------------ | ------------------------------------------------------- |
-| `__`                  | `(key: string) => string`                              | Translate a string, or return it unchanged.             |
+| `__`                  | `(key: string, args?: TranslationArgs) => string`      | Translate a string (or return it unchanged), filling `{placeholder}`s from `args`. |
 | `locale`              | `string \| undefined`                                  | The currently selected locale.                          |
 | `setLocale`           | `(locale: string) => Promise<void>`                    | Switch + persist the locale; resolves once applied.     |
 | `getSupportedLocales` | `() => string[]`                                       | Locales registered via `init`.                          |
 
-**Types:** `Translations`, `LocaleLoader`, `LocaleSource`, `InitOptions`, `InitSettings`, `LocaleAPI`.
+**Types:** `Translations`, `TranslationArgs`, `LocaleLoader`, `LocaleSource`, `InitOptions`, `InitSettings`, `LocaleAPI`.
 
 **Plugin:** `ReactLocalizationPlugin` — imported from `@galalem/react-localization/vite`.

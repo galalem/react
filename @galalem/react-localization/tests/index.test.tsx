@@ -91,6 +91,103 @@ describe("<T>", () => {
   });
 });
 
+// --- Interpolation ----------------------------------------------------------
+
+/** init + activate a single locale, returning the hook result. */
+async function withLocale(dict: Record<string, string | null>) {
+  const m = await fresh();
+  m.init({ en: dict });
+  const { result } = renderHook(() => m.useLocale());
+  await act(async () => {
+    await result.current.setLocale("en");
+  });
+  return { m, result };
+}
+
+describe("interpolation", () => {
+  it("substitutes placeholders in the translation", async () => {
+    const { result } = await withLocale({ "Hello, {name}": "Hola, {name}" });
+    expect(result.current.__("Hello, {name}", { name: "Ada" })).toBe("Hola, Ada");
+  });
+
+  it("substitutes repeated and multiple placeholders", async () => {
+    const { result } = await withLocale({});
+    expect(result.current.__("{a}-{b}-{a}", { a: "x", b: "y" })).toBe("x-y-x");
+  });
+
+  it("accepts number values, including 0", async () => {
+    const { result } = await withLocale({});
+    expect(result.current.__("{count} items", { count: 0 })).toBe("0 items");
+  });
+
+  it("allows letters, digits and underscores in names", async () => {
+    const { result } = await withLocale({});
+    expect(result.current.__("{0} {first_name} {A1}", { 0: "a", first_name: "b", A1: "c" })).toBe(
+      "a b c",
+    );
+  });
+
+  it("leaves placeholders without a matching arg as-is", async () => {
+    const { result } = await withLocale({});
+    expect(result.current.__("Hi {name}, {other}", { name: "Ada" })).toBe("Hi Ada, {other}");
+  });
+
+  it("ignores braces that aren't valid placeholders", async () => {
+    const { result } = await withLocale({});
+    const args = { name: "Ada", "first-name": "x", " name ": "x", "": "x" };
+    expect(result.current.__("{ name } {first-name} {} {name!}", args)).toBe(
+      "{ name } {first-name} {} {name!}",
+    );
+  });
+
+  it("matches the inner placeholder of double braces", async () => {
+    const { result } = await withLocale({});
+    expect(result.current.__("{{name}}", { name: "Ada" })).toBe("{Ada}");
+  });
+
+  it("does not re-substitute placeholders inside values", async () => {
+    const { result } = await withLocale({});
+    expect(result.current.__("{a} {b}", { a: "{b}", b: "B" })).toBe("{b} B");
+  });
+
+  it("ignores inherited properties of the args object", async () => {
+    const { result } = await withLocale({});
+    expect(result.current.__("{toString} {constructor}", {})).toBe("{toString} {constructor}");
+  });
+
+  it("interpolates the key when the value is null or missing", async () => {
+    const { result } = await withLocale({ "Hi {name}": null });
+    expect(result.current.__("Hi {name}", { name: "Ada" })).toBe("Hi Ada");
+    expect(result.current.__("Bye {name}", { name: "Ada" })).toBe("Bye Ada");
+  });
+
+  it("leaves placeholders untouched when no args are passed", async () => {
+    const { result } = await withLocale({ "Hi {name}": "Hola {name}" });
+    expect(result.current.__("Hi {name}")).toBe("Hola {name}");
+  });
+
+  it("<T args> substitutes placeholders", async () => {
+    const { m } = await withLocale({ "Hello, {name}": "Hola, {name}" });
+    render(createElement(m.T, { args: { name: "Ada" } }, "Hello, {name}"));
+    expect(screen.getByText("Hola, Ada")).toBeTruthy();
+  });
+
+  it("<T args> re-renders with the new template after setLocale", async () => {
+    const m = await fresh();
+    m.init({ en: { "Hi {name}": "Hi {name}" }, es: { "Hi {name}": "Hola {name}" } });
+    const { result } = renderHook(() => m.useLocale());
+    await act(async () => {
+      await result.current.setLocale("en");
+    });
+    render(createElement(m.T, { args: { name: "Ada" } }, "Hi {name}"));
+    expect(screen.getByText("Hi Ada")).toBeTruthy();
+    await act(async () => {
+      await result.current.setLocale("es");
+    });
+    expect(screen.getByText("Hola Ada")).toBeTruthy();
+  });
+});
+
 // --- useLocale + auto-subscribe ---------------------------------------------
 
 describe("useLocale + <T> auto-subscribe", () => {
