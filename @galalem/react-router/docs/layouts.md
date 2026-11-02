@@ -210,6 +210,7 @@ Because a layout is just a component, it can hold React `<ErrorBoundary>`, `<Sus
 - **They don't run guards.** Access rules go on the route or group.
 - **They don't get route params directly.** They receive `children`, not context. If a layout needs params, call `useRouter()` inside it.
 - **They don't own the URL.** Only route configuration owns matching. Layouts render the winner.
+- **They don't get their own base for relative links.** Pass an absolute `to` inside a layout. A layout is shared by every route beneath it, so a relative `to` resolves against whichever page is currently on screen — a sidebar `<NavLink to="settings">` would point at `/teams/settings` on one page and `/teams/7/settings` on the next. A layout that needs to build links against its own section should take the prefix as a prop, or read it from `useRouter()`.
 
 ## Non-goals
 

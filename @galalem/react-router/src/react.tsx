@@ -14,6 +14,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { pathnameOf, resolvePath } from "./resolve";
 import type {
   ErrorComponentMap,
   HttpError,
@@ -46,6 +47,21 @@ function syncMetaToDom(meta: MetaMap, initialTitle: string): void {
 }
 
 const RouterContext = createContext<Router | null>(null);
+
+function useRouterState(router: Router): RouterState {
+  const subscribe = useCallback(
+    (onChange: () => void) => router.subscribe(() => onChange()),
+    [router],
+  );
+  return useSyncExternalStore(subscribe, router.getState);
+}
+
+// The base a relative `to` resolves against: the current route, with its
+// query, which a hash-only `to` has to preserve.
+function useResolvedTo(router: Router, to: string): string {
+  const state = useRouterState(router);
+  return resolvePath(to, state.path + state.search);
+}
 
 // Default error components — plain heading with the status. Users override via the errors map.
 
@@ -92,11 +108,7 @@ function renderWithLayouts(
 }
 
 export function RouterProvider({ router }: { router: Router }): ReactElement {
-  const subscribe = useCallback(
-    (onChange: () => void) => router.subscribe(() => onChange()),
-    [router],
-  );
-  const state = useSyncExternalStore(subscribe, router.getState);
+  const state = useRouterState(router);
 
   const initialTitleRef = useRef<string>("");
   useEffect(() => {
@@ -131,11 +143,7 @@ export function useRouter(): Router & {
       "useRouter must be used inside a <RouterProvider>.",
     );
   }
-  const subscribe = useCallback(
-    (onChange: () => void) => router.subscribe(() => onChange()),
-    [router],
-  );
-  const state = useSyncExternalStore(subscribe, router.getState);
+  const state = useRouterState(router);
 
   return {
     ...router,
@@ -174,16 +182,23 @@ export function Link({
   if (!router) {
     throw new Error("<Link> must be used inside a <RouterProvider>.");
   }
+  // Navigating with the same value the anchor advertises keeps a plain click,
+  // a middle-click and "open in new tab" pointing at one destination.
+  const resolvedTo = useResolvedTo(router, to);
 
   const handleClick = (event: MouseEvent<HTMLAnchorElement>): void => {
     if (onClick) onClick(event);
     if (!shouldInterceptClick(event)) return;
     event.preventDefault();
-    if (replace) router.replace(to, data);
-    else router.push(to, data);
+    if (replace) router.replace(resolvedTo, data);
+    else router.push(resolvedTo, data);
   };
 
-  return createElement("a", { ...rest, href: to, onClick: handleClick }, children);
+  return createElement(
+    "a",
+    { ...rest, href: resolvedTo, onClick: handleClick },
+    children,
+  );
 }
 
 type NavLinkRenderProps = { isActive: boolean };
@@ -222,12 +237,9 @@ export function NavLink({
   if (!router) {
     throw new Error("<NavLink> must be used inside a <RouterProvider>.");
   }
-  const subscribe = useCallback(
-    (onChange: () => void) => router.subscribe(() => onChange()),
-    [router],
-  );
-  const state = useSyncExternalStore(subscribe, router.getState);
-  const isActive = isActivePath(state.path, to, exact);
+  const state = useRouterState(router);
+  const resolvedTo = resolvePath(to, state.path + state.search);
+  const isActive = isActivePath(state.path, pathnameOf(resolvedTo), exact);
 
   const resolvedClassName = useMemo(() => {
     const base = typeof className === "function" ? className({ isActive }) : className;
@@ -240,8 +252,8 @@ export function NavLink({
     if (onClick) onClick(event);
     if (!shouldInterceptClick(event)) return;
     event.preventDefault();
-    if (replace) router.replace(to, data);
-    else router.push(to, data);
+    if (replace) router.replace(resolvedTo, data);
+    else router.push(resolvedTo, data);
   };
 
   const resolvedChildren =
@@ -251,7 +263,7 @@ export function NavLink({
     "a",
     {
       ...rest,
-      href: to,
+      href: resolvedTo,
       onClick: handleClick,
       className: resolvedClassName,
       "aria-current": isActive ? "page" : undefined,

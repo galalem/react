@@ -1,6 +1,7 @@
 import { authGuard, rolesGuard, runGuards } from "./guards";
 import { createHistory } from "./history";
 import { matchPath } from "./matcher";
+import { resolvePath, resolveRedirect } from "./resolve";
 import { flattenRoutes } from "./tree";
 import type {
   AuthConfig,
@@ -246,7 +247,7 @@ export function createRouter(options: CreateRouterOptions): Router {
     }
 
     if ("redirect" in result) {
-      history.replace(result.redirect);
+      history.replace(resolveRedirect(result.redirect));
       return;
     }
 
@@ -291,9 +292,14 @@ export function createRouter(options: CreateRouterOptions): Router {
       ? null
       : options.auth?.redirectParam ?? DEFAULT_REDIRECT_PARAM;
 
+  // A relative `to` resolves against the route the app is currently showing,
+  // not `window.location` — during a pending navigation the browser URL has
+  // already moved on, while `state.path` is still the route on screen.
+  const currentBase = (): string => state.path + state.search;
+
   return {
-    push: (to, data) => history.push(to, data),
-    replace: (to, data) => history.replace(to, data),
+    push: (to, data) => history.push(resolvePath(to, currentBase()), data),
+    replace: (to, data) => history.replace(resolvePath(to, currentBase()), data),
     back: () => history.back(),
     forward: () => history.forward(),
     reload: () => {
