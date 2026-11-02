@@ -416,6 +416,32 @@ function Filters() {
 }
 ```
 
+### Relative links
+
+A `to` without a leading `/` resolves against **the route you are currently on**, treated as a directory. A `to` that starts with `/` is absolute and untouched.
+
+```tsx
+// mounted at /app/iam/groups
+<Link to={row.id}>open</Link>      // -> /app/iam/groups/<id>
+// mounted at /app/iam/groups/:id
+<Link to="edit">edit</Link>        // -> /app/iam/groups/<id>/edit
+<Link to="..">back to list</Link>  // -> /app/iam/groups
+```
+
+The point is that the same component tree can be mounted under two prefixes — an app's office at `/app/...` and the platform's mirror of the same screens at `/admin/...` — and its links follow it, because a component mounted twice cannot know its own prefix.
+
+Resolution is against the matched route, not `window.location`, so `to={id}` means "my child" whether the URL is `/groups` or `/groups/`. `router.push` and `router.replace` resolve the same way, and the anchor's `href` carries the resolved value so a middle-click lands where a plain click would.
+
+Three things to know:
+
+- **Inside a layout, pass an absolute `to`.** A layout is shared by every route beneath it, so a relative `to` there resolves against whichever page is on screen — rarely what a sidebar wants.
+- **Under a wildcard route**, the base is the full matched path. On `/docs/*` matched at `/docs/a/b`, `to="c"` gives `/docs/a/b/c`.
+- **Query- and hash-only targets follow the URL spec.** `to="?tab=2"` keeps the path and replaces the whole query; `to="#top"` keeps the path and query.
+
+`..` past the root clamps at `/` and warns in development — usually a sign a component is mounted shallower than its author expected.
+
+Guard redirects are the exception: `{ redirect }` must be absolute, since a guard runs mid-navigation where "the current route" is ambiguous. A relative one is read as root-relative and warns in development.
+
 ### Active links with NavLink
 
 `NavLink` is `Link` with active-state awareness. Give it an `activeClassName` or a function-form `className`:

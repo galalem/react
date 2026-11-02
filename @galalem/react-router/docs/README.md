@@ -80,7 +80,6 @@ Documented at the top of the source design doc but worth stating publicly:
 - Route model binding (Laravel-style)
 - Scroll restoration
 - View transitions API integration
-- Relative links
 
 Some of these may land in v0.2. All of them are intentional omissions, not oversights.
 

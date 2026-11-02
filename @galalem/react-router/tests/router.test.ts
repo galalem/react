@@ -1290,3 +1290,171 @@ describe("createRouter — auth redirect encodes intended URL", () => {
     expect(router.getState().query.redirectUrl).toBe("/dashboard?ref=email");
   });
 });
+
+describe("createRouter — relative navigation", () => {
+  const Groups: ComponentType = () => null;
+  const GroupDetail: ComponentType = () => null;
+  const GroupEdit: ComponentType = () => null;
+
+  const mirroredRoutes = [
+    { path: "/app/iam/groups", component: Groups },
+    { path: "/app/iam/groups/:id", component: GroupDetail },
+    { path: "/app/iam/groups/:id/edit", component: GroupEdit },
+    { path: "/admin/iam/groups", component: Groups },
+    { path: "/admin/iam/groups/:id", component: GroupDetail },
+    { path: "/admin/iam/groups/:id/edit", component: GroupEdit },
+  ];
+
+  it("push resolves a relative `to` against the current route", async () => {
+    window.history.replaceState({}, "", "/app/iam/groups");
+    const router = trackRouter(createRouter({ routes: mirroredRoutes }));
+    await flush();
+
+    router.push("g-sup");
+    await flush();
+
+    expect(window.location.pathname).toBe("/app/iam/groups/g-sup");
+    expect(router.getState().path).toBe("/app/iam/groups/g-sup");
+    expect(router.getState().component).toBe(GroupDetail);
+    expect(router.getState().params).toEqual({ id: "g-sup" });
+  });
+
+  it("sends the same `to` to a different place under a different mount point", async () => {
+    window.history.replaceState({}, "", "/admin/iam/groups");
+    const router = trackRouter(createRouter({ routes: mirroredRoutes }));
+    await flush();
+
+    router.push("g-sup");
+    await flush();
+
+    expect(window.location.pathname).toBe("/admin/iam/groups/g-sup");
+    expect(router.getState().component).toBe(GroupDetail);
+  });
+
+  it("keeps the browser URL and the matched route in agreement", async () => {
+    window.history.replaceState({}, "", "/app/iam/groups/7");
+    const router = trackRouter(createRouter({ routes: mirroredRoutes }));
+    await flush();
+
+    router.push("edit");
+    await flush();
+
+    expect(router.getState().path).toBe(window.location.pathname);
+    expect(router.getState().component).toBe(GroupEdit);
+  });
+
+  it('walks up to the list with ".."', async () => {
+    window.history.replaceState({}, "", "/app/iam/groups/7");
+    const router = trackRouter(createRouter({ routes: mirroredRoutes }));
+    await flush();
+
+    router.push("..");
+    await flush();
+
+    expect(window.location.pathname).toBe("/app/iam/groups");
+    expect(router.getState().component).toBe(Groups);
+  });
+
+  it("leaves an absolute `to` alone", async () => {
+    window.history.replaceState({}, "", "/app/iam/groups/7");
+    const router = trackRouter(createRouter({ routes: mirroredRoutes }));
+    await flush();
+
+    router.push("/admin/iam/groups");
+    await flush();
+
+    expect(window.location.pathname).toBe("/admin/iam/groups");
+  });
+
+  it("replace resolves relatively too", async () => {
+    window.history.replaceState({}, "", "/app/iam/groups/7");
+    const router = trackRouter(createRouter({ routes: mirroredRoutes }));
+    await flush();
+
+    router.replace("edit");
+    await flush();
+
+    expect(window.location.pathname).toBe("/app/iam/groups/7/edit");
+  });
+
+  it("keeps the path when the `to` is query-only", async () => {
+    window.history.replaceState({}, "", "/app/iam/groups?a=1");
+    const router = trackRouter(createRouter({ routes: mirroredRoutes }));
+    await flush();
+
+    router.push("?tab=members");
+    await flush();
+
+    expect(window.location.pathname).toBe("/app/iam/groups");
+    expect(window.location.search).toBe("?tab=members");
+    expect(router.getState().query).toEqual({ tab: "members" });
+  });
+
+  it("carries the navigation payload through a relative push", async () => {
+    window.history.replaceState({}, "", "/app/iam/groups");
+    const router = trackRouter(createRouter({ routes: mirroredRoutes }));
+    await flush();
+
+    router.push("g-sup", { from: "list" });
+    await flush();
+
+    expect(router.getState().data).toEqual({ from: "list" });
+  });
+
+  it("resolves against the rendered route, not a URL a pending guard is still on", async () => {
+    window.history.replaceState({}, "", "/app/iam/groups");
+    let release: () => void = () => {};
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const slowGuard: Guard = async () => {
+      await blocked;
+      return true as const;
+    };
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/app/iam/groups", component: Groups },
+          { path: "/app/iam/groups/:id", component: GroupDetail, guards: [slowGuard] },
+          { path: "/app/iam/groups/:id/edit", component: GroupEdit },
+        ],
+      }),
+    );
+    await flush();
+
+    // The browser URL moves immediately; the route on screen does not until
+    // the guard settles, and that route is what a relative `to` resolves from.
+    router.push("7");
+    await flush();
+    expect(window.location.pathname).toBe("/app/iam/groups/7");
+    expect(router.getState().path).toBe("/app/iam/groups");
+
+    router.push("8");
+    await flush();
+    expect(window.location.pathname).toBe("/app/iam/groups/8");
+
+    release();
+    await flush();
+  });
+
+  it("reads a relative guard redirect as root-relative and warns", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    window.history.replaceState({}, "", "/app/iam/groups");
+    const denying: Guard = () => ({ redirect: "login" });
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/app/iam/groups", component: Groups, guards: [denying] },
+          { path: "/login", component: Login },
+        ],
+      }),
+    );
+    await flush();
+
+    expect(window.location.pathname).toBe("/login");
+    expect(router.getState().component).toBe(Login);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain("must be absolute");
+    warn.mockRestore();
+  });
+});

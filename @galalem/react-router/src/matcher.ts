@@ -1,24 +1,11 @@
+import { splitSegments } from "./path";
 import type { MatchResult, RouteParams } from "./types";
 
 const WILDCARD = "*";
 
-function normalize(p: string): string {
-  const withLeading = p.startsWith("/") ? p : "/" + p;
-  if (withLeading.length > 1 && withLeading.endsWith("/")) {
-    return withLeading.slice(0, -1);
-  }
-  return withLeading;
-}
-
-function segments(p: string): string[] {
-  const n = normalize(p);
-  if (n === "/") return [];
-  return n.slice(1).split("/");
-}
-
 export function matchPath(pattern: string, path: string): MatchResult {
-  const patternSegments = segments(pattern);
-  const pathSegments = segments(path);
+  const patternSegments = splitSegments(pattern);
+  const pathSegments = splitSegments(path);
   const params: RouteParams = {};
 
   for (let i = 0; i < patternSegments.length; i++) {

@@ -920,3 +920,178 @@ describe("useRouter — query and hash", () => {
     expect(screen.getByTestId("tab").textContent).toBe("settings");
   });
 });
+
+describe("Link — relative `to`", () => {
+  // One component, mounted under two prefixes, linking within itself. It is
+  // never told which prefix it is under.
+  const GroupsList = () => <Link to="g-sup">open</Link>;
+  const GroupDetail = () => <div data-testid="detail">detail</div>;
+
+  const mirroredRoutes = [
+    { path: "/app/iam/groups", component: GroupsList },
+    { path: "/app/iam/groups/:id", component: GroupDetail },
+    { path: "/admin/iam/groups", component: GroupsList },
+    { path: "/admin/iam/groups/:id", component: GroupDetail },
+  ];
+
+  it("resolves the href against the mount point", async () => {
+    window.history.replaceState({}, "", "/app/iam/groups");
+    const router = trackRouter(createRouter({ routes: mirroredRoutes }));
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+    expect(screen.getByRole("link", { name: "open" }).getAttribute("href")).toBe(
+      "/app/iam/groups/g-sup",
+    );
+  });
+
+  it("resolves the same href differently under the other mount point", async () => {
+    window.history.replaceState({}, "", "/admin/iam/groups");
+    const router = trackRouter(createRouter({ routes: mirroredRoutes }));
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+    expect(screen.getByRole("link", { name: "open" }).getAttribute("href")).toBe(
+      "/admin/iam/groups/g-sup",
+    );
+  });
+
+  it("navigates a plain click to the same place the href advertises", async () => {
+    window.history.replaceState({}, "", "/admin/iam/groups");
+    const router = trackRouter(createRouter({ routes: mirroredRoutes }));
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+    const anchor = screen.getByRole("link", { name: "open" });
+    const advertised = anchor.getAttribute("href");
+
+    await act(async () => {
+      fireEvent.click(anchor);
+    });
+
+    expect(window.location.pathname).toBe(advertised);
+    expect(screen.getByTestId("detail")).toBeDefined();
+  });
+
+  it("re-resolves when the route changes under it", async () => {
+    const Shell = () => (
+      <div>
+        <Link to="child">go</Link>
+        <span data-testid="where">{useRouter().path}</span>
+      </div>
+    );
+    window.history.replaceState({}, "", "/a");
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/a", component: Shell },
+          { path: "/b", component: Shell },
+        ],
+      }),
+    );
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+    expect(screen.getByRole("link", { name: "go" }).getAttribute("href")).toBe(
+      "/a/child",
+    );
+
+    await act(async () => {
+      router.push("/b");
+    });
+    expect(screen.getByRole("link", { name: "go" }).getAttribute("href")).toBe(
+      "/b/child",
+    );
+  });
+
+  it("resolves a relative `to` on a replace link", async () => {
+    window.history.replaceState({}, "", "/app/iam/groups");
+    const ReplaceList = () => (
+      <Link to="g-sup" replace>
+        open
+      </Link>
+    );
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/app/iam/groups", component: ReplaceList },
+          { path: "/app/iam/groups/:id", component: GroupDetail },
+        ],
+      }),
+    );
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("link", { name: "open" }));
+    });
+    expect(window.location.pathname).toBe("/app/iam/groups/g-sup");
+  });
+});
+
+describe("NavLink — relative `to`", () => {
+  it("compares the resolved path when deciding active state", async () => {
+    const Nav = () => (
+      <nav>
+        <NavLink to="members" activeClassName="active" className="link">
+          members
+        </NavLink>
+        <NavLink to="settings" activeClassName="active" className="link">
+          settings
+        </NavLink>
+      </nav>
+    );
+    const Child = () => (
+      <div>
+        <Nav />
+      </div>
+    );
+    window.history.replaceState({}, "", "/teams/7");
+    const router = trackRouter(
+      createRouter({
+        routes: [
+          { path: "/teams/7", component: Nav },
+          { path: "/teams/7/members", component: Child },
+        ],
+      }),
+    );
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+
+    expect(
+      screen.getByRole("link", { name: "members" }).getAttribute("href"),
+    ).toBe("/teams/7/members");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("link", { name: "members" }));
+    });
+
+    // Mounted at /teams/7/members, "members" now resolves to
+    // /teams/7/members/members — so the link is no longer the active one.
+    const members = screen.getByRole("link", { name: "members" });
+    expect(members.className).toBe("link");
+    expect(members.getAttribute("aria-current")).toBeNull();
+  });
+
+  it("marks an exact relative match active", async () => {
+    const Nav = () => (
+      <nav>
+        <NavLink to="." activeClassName="active" className="link">
+          self
+        </NavLink>
+      </nav>
+    );
+    window.history.replaceState({}, "", "/teams/7");
+    const router = trackRouter(
+      createRouter({ routes: [{ path: "/teams/7", component: Nav }] }),
+    );
+    await act(async () => {
+      render(<RouterProvider router={router} />);
+    });
+    const self = screen.getByRole("link", { name: "self" });
+    expect(self.getAttribute("href")).toBe("/teams/7");
+    expect(self.className).toBe("link active");
+    expect(self.getAttribute("aria-current")).toBe("page");
+  });
+});
